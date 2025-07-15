@@ -1,18 +1,19 @@
 import os
 import time
 import secrets
+import string
+import random
 import sys
 from web3 import Web3
 from dotenv import load_dotenv
 
-# === Load ENV ===
+# === Setup ===
 load_dotenv()
 
 RPC_URL = "https://testnet.dplabs-internal.com"
 CONTRACT_ADDRESS = Web3.to_checksum_address("0x51be1ef20a1fd5179419738fc71d95a8b6f8a175")
 ACCOUNTS_FILE = "accounts.txt"
 
-# === Setup Web3 ===
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
 
 if not w3.is_connected():
@@ -21,144 +22,145 @@ if not w3.is_connected():
 else:
     print(f"✅ Terkoneksi ke Pharos RPC")
 
-# === ABI Terdekompilasi dari bytecode ===
+# === ABI ===
 CONTRACT_ABI = [
     {
+        "inputs": [{"internalType": "bytes32", "name": "commitment", "type": "bytes32"}],
         "name": "commit",
-        "type": "function",
+        "outputs": [],
         "stateMutability": "nonpayable",
-        "inputs": [{"name": "commitment", "type": "bytes32"}],
-        "outputs": []
+        "type": "function"
     },
     {
+        "inputs": [
+            {"internalType": "string", "name": "name", "type": "string"},
+            {"internalType": "address", "name": "owner", "type": "address"},
+            {"internalType": "bytes32", "name": "secret", "type": "bytes32"},
+            {"internalType": "uint256", "name": "duration", "type": "uint256"}
+        ],
         "name": "register",
-        "type": "function",
+        "outputs": [],
         "stateMutability": "payable",
-        "inputs": [
-            {"name": "name", "type": "string"},
-            {"name": "owner", "type": "address"},
-            {"name": "secret", "type": "bytes32"},
-            {"name": "duration", "type": "uint256"}
-        ],
-        "outputs": []
+        "type": "function"
     },
     {
-        "name": "makeCommitment",
-        "type": "function",
-        "stateMutability": "pure",
         "inputs": [
-            {"name": "name", "type": "string"},
-            {"name": "owner", "type": "address"},
-            {"name": "secret", "type": "bytes32"}
+            {"internalType": "string", "name": "name", "type": "string"}
         ],
-        "outputs": [{"name": "", "type": "bytes32"}]
+        "name": "available",
+        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "string", "name": "name", "type": "string"},
+            {"internalType": "address", "name": "owner", "type": "address"},
+            {"internalType": "bytes32", "name": "secret", "type": "bytes32"}
+        ],
+        "name": "makeCommitment",
+        "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+        "stateMutability": "pure",
+        "type": "function"
     }
 ]
 
 contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
 
-# === Load Wallets ===
-def load_wallets(file):
+# === Wallet Loader ===
+def load_wallets(path):
     try:
-        with open(file, 'r') as f:
-            lines = [line.strip() for line in f if line.strip()]
-        wallets = []
-        for key in lines:
-            if not key.startswith("0x"):
-                key = "0x" + key
-            acct = w3.eth.account.from_key(key)
-            wallets.append({"private_key": key, "address": acct.address})
-        return wallets
+        with open(path) as f:
+            return [{'private_key': k.strip(), 'address': w3.eth.account.from_key(k.strip()).address}
+                    for k in f if k.strip()]
     except Exception as e:
-        print(f"❌ Gagal load akun dari {file}: {e}")
+        print(f"❌ Gagal baca file akun: {e}")
         return []
 
 wallets = load_wallets(ACCOUNTS_FILE)
 if not wallets:
-    print("Tidak ada wallet ditemukan.")
+    print("❌ Tidak ada wallet ditemukan.")
     sys.exit(1)
 
 print(f"🔑 Loaded {len(wallets)} wallet")
 
-# === Gas Price Helper ===
+# === Helper ===
+def random_domain(length=8):
+    return ''.join(random.choices(string.ascii_lowercase, k=length))
+
+def domain_available(name):
+    try:
+        return contract.functions.available(name).call()
+    except Exception as e:
+        print(f"❌ Gagal cek domain {name}: {e}")
+        return False
+
 def get_gas_price():
     try:
         return w3.eth.gas_price
     except:
         return Web3.to_wei(1, 'gwei')
 
-# === Tx Sign & Send ===
-def sign_and_send(txn, private_key):
+def sign_and_send(txn, pk):
     try:
-        signed = w3.eth.account.sign_transaction(txn, private_key)
+        signed = w3.eth.account.sign_transaction(txn, pk)
         tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=600)
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
         status = "✅" if receipt.status == 1 else "❌"
         print(f"{status} Tx hash: {tx_hash.hex()}")
         return receipt.status == 1
     except Exception as e:
-        print(f"❌ Gagal kirim tx: {e}")
+        print(f"❌ Tx error: {e}")
         return False
 
-# === Proses Mint Domain ===
+# === Mint Domain ===
 def register_domain(domain, wallet):
-    address = wallet["address"]
-    pk = wallet["private_key"]
-    print(f"\n🚀 Proses {domain}.phrs untuk {address}")
+    addr = wallet['address']
+    pk = wallet['private_key']
+    print(f"\n🚀 Coba mint domain: {domain}.phrs untuk {addr}")
+
+    if not domain_available(domain):
+        print(f"⚠️ Domain {domain}.phrs sudah diambil, skip...")
+        return
+
+    secret = secrets.token_bytes(32)
+    nonce = w3.eth.get_transaction_count(addr)
+    gas = get_gas_price()
 
     try:
-        secret = secrets.token_bytes(32)
-        nonce = w3.eth.get_transaction_count(address)
-        gas = get_gas_price()
-
-        # Commit
-        commitment = contract.functions.makeCommitment(domain, address, secret).call()
-        tx_commit = contract.functions.commit(commitment).build_transaction({
-            'from': address,
-            'nonce': nonce,
-            'gas': 200000,
-            'gasPrice': gas
+        commitment = contract.functions.makeCommitment(domain, addr, secret).call()
+        commit_tx = contract.functions.commit(commitment).build_transaction({
+            'from': addr, 'nonce': nonce,
+            'gas': 200000, 'gasPrice': gas
         })
         print("🔒 Commit...")
-        if not sign_and_send(tx_commit, pk): return
+        if not sign_and_send(commit_tx, pk): return
+    except Exception as e:
+        print(f"❌ Commit error: {e}")
+        return
 
-        print("⏳ Menunggu 60 detik sebelum register...")
-        time.sleep(60)
+    print("⏳ Tunggu 60 detik...")
+    time.sleep(60)
 
-        # Register
-        nonce = w3.eth.get_transaction_count(address)
+    try:
+        nonce = w3.eth.get_transaction_count(addr)
         duration = 31536000  # 1 tahun
         fee = Web3.to_wei(0.001, 'ether')
-        tx_register = contract.functions.register(domain, address, secret, duration).build_transaction({
-            'from': address,
-            'nonce': nonce,
-            'gas': 300000,
-            'gasPrice': gas,
-            'value': fee
+        register_tx = contract.functions.register(domain, addr, secret, duration).build_transaction({
+            'from': addr, 'nonce': nonce,
+            'gas': 300000, 'gasPrice': gas, 'value': fee
         })
         print("🔥 Register...")
-        if sign_and_send(tx_register, pk):
-            print(f"🎉 {domain}.phrs berhasil diregister!")
+        if sign_and_send(register_tx, pk):
+            print(f"🎉 Berhasil mint: {domain}.phrs")
     except Exception as e:
-        print(f"❌ Error saat proses: {e}")
+        print(f"❌ Register error: {e}")
 
-# === MAIN ===
-if __name__ == '__main__':
-    domains = [
-        "pharos1", "pharos2", "pharos3", "pharos4",
-        "botalpha", "phrsbot1", "phrsbot2"
-    ]
-
-    print(f"\n📦 Total domain: {len(domains)} | 🧾 Wallets: {len(wallets)}\n")
-    i = 0
-    while i < len(domains):
-        for wallet in wallets:
-            if i >= len(domains):
-                break
-            register_domain(domains[i], wallet)
-            i += 1
-            if i < len(domains):
-                print("🕐 Delay 5 detik ke domain berikutnya...")
-                time.sleep(5)
-
-    print("\n✅ Semua domain selesai diproses.")
+# === Main Loop ===
+if __name__ == "__main__":
+    while True:
+        for w in wallets:
+            domain = random_domain()
+            register_domain(domain, w)
+            print("🕐 Delay 5 detik ke domain berikutnya...")
+            time.sleep(5)
