@@ -10,61 +10,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ===== KONFIGURASI =====
+# ===== KONFIGURASI PHAROS TESTNET =====
 RPC_URL = "https://testnet.dplabs-internal.com"
 CONTRACT_ADDRESS = "0x51Be1Ef20A1fD5179419738fC71D95a8B6F8A175"
+CHAIN_ID = 688688  # Chain ID Pharos Testnet
+SYMBOL = "PHRS"    # Simbol network
 ACCOUNTS_FILE = "accounts.txt"
-MIN_DOMAIN_LENGTH = 3  # Panjang minimal domain
-MAX_DOMAIN_LENGTH = 10  # Panjang maksimal domain
-MIN_COMMIT_WAIT = 60  # Waktu tunggu minimal commit (detik)
+MIN_DOMAIN_LENGTH = 3
+MAX_DOMAIN_LENGTH = 10
+MIN_COMMIT_WAIT = 60  # 1 menit
 GAS_LIMIT_COMMIT = 300000
 GAS_LIMIT_REGISTER = 500000
-REGISTRATION_FEE = Web3.to_wei(0.01, 'ether')  # Biaya registrasi
-MAX_RETRIES = 3  # Jumlah percobaan per domain
+REGISTRATION_FEE = Web3.to_wei(0.01, 'ether')  # 0.01 PHRS
+MAX_RETRIES = 3
 
 # ===== INISIALISASI WEB3 =====
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
-print(f"⏳ Menghubungkan ke RPC... ({RPC_URL})")
+print(f"⏳ Menghubungkan ke Pharos Testnet (Chain ID: {CHAIN_ID})...")
 
-contract_abi = [
-    {
-        "inputs": [{"internalType": "bytes32", "name": "commitment", "type": "bytes32"}],
-        "name": "commit",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "address", "name": "owner", "type": "address"},
-            {"internalType": "bytes32", "name": "secret", "type": "bytes32"},
-            {"internalType": "uint256", "name": "duration", "type": "uint256"}
-        ],
-        "name": "register",
-        "outputs": [],
-        "stateMutability": "payable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "address", "name": "owner", "type": "address"},
-            {"internalType": "bytes32", "name": "secret", "type": "bytes32"}
-        ],
-        "name": "makeCommitment",
-        "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
-        "stateMutability": "pure",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "string", "name": "name", "type": "string"}],
-        "name": "available",
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "view",
-        "type": "function"
-    }
-]
+contract_abi = [...]  # Gunakan ABI yang sama seperti sebelumnya
 
 contract = w3.eth.contract(
     address=Web3.to_checksum_address(CONTRACT_ADDRESS),
@@ -72,188 +36,124 @@ contract = w3.eth.contract(
 )
 
 if not w3.is_connected():
-    print("❌ Gagal terhubung ke RPC")
+    print(f"❌ Gagal terhubung ke Pharos Testnet")
     sys.exit(1)
 else:
-    print("✅ Terhubung ke Pharos RPC")
-
-# ===== FUNGSI UTILITAS =====
-def load_wallets():
-    """Memuat wallet dari file teks"""
-    try:
-        with open(ACCOUNTS_FILE, 'r') as f:
-            lines = [l.strip() for l in f if l.strip()]
-        
-        wallets = []
-        for l in lines:
-            try:
-                pk = '0x' + l if not l.startswith('0x') else l
-                wallets.append({
-                    'private_key': pk,
-                    'address': w3.eth.account.from_key(pk).address
-                })
-            except Exception as e:
-                print(f"⚠️ Gagal memproses private key: {e}")
-        
-        return wallets
-    except Exception as e:
-        print(f"❌ Gagal memuat akun: {e}")
-        return []
-
-def generate_valid_domain():
-    """Generate nama domain yang valid"""
-    length = random.randint(MIN_DOMAIN_LENGTH, MAX_DOMAIN_LENGTH)
-    while True:
-        domain = ''.join(random.choices(string.ascii_lowercase, k=length))
-        # Tambahkan validasi tambahan jika diperlukan
-        if len(domain) >= MIN_DOMAIN_LENGTH:
-            return domain
+    print(f"✅ Terhubung ke Pharos Testnet | Chain ID: {w3.eth.chain_id}")
 
 def get_gas_price():
-    """Mendapatkan gas price dengan fallback default"""
+    """Gas price khusus untuk testnet"""
     try:
-        return w3.eth.gas_price
-    except Exception as e:
-        print(f"⚠️ Gagal mendapatkan gas price: {e}, menggunakan default")
-        return Web3.to_wei(10, 'gwei')
+        # Untuk testnet, gunakan gas price lebih rendah
+        return Web3.to_wei(2, 'gwei')  # 2 Gwei untuk testnet
+    except:
+        return Web3.to_wei(2, 'gwei')
 
 def send_transaction(tx, pk, action_name=""):
-    """Menandatangani dan mengirim transaksi"""
+    """Menambahkan penanganan khusus untuk testnet"""
     try:
+        # Pastikan chain ID sesuai
+        tx['chainId'] = CHAIN_ID
+        
         signed_tx = w3.eth.account.sign_transaction(tx, pk)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         print(f"⏳ {action_name} TX dikirim: {tx_hash.hex()}")
+        print(f"🔗 Explorer: https://pharos-testnet.socialscan.io/tx/{tx_hash.hex()}")
         
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
         
         if receipt.status == 1:
-            print(f"✅ {action_name} berhasil")
+            print(f"✅ {action_name} berhasil (Gas used: {receipt.gasUsed})")
             return True
         else:
-            print(f"❌ {action_name} gagal (status: {receipt.status})")
+            print(f"❌ {action_name} gagal (Block: {receipt.blockNumber})")
             return False
     except ContractLogicError as e:
-        print(f"❌ Error kontrak saat {action_name}: {e}")
+        print(f"❌ Error kontrak: {e.message}")
     except Exception as e:
-        print(f"❌ Error saat {action_name}: {str(e)}")
+        print(f"❌ Error: {str(e)}")
     return False
 
-def check_domain_available(domain):
-    """Memeriksa ketersediaan domain"""
-    try:
-        return contract.functions.available(domain).call()
-    except Exception as e:
-        print(f"⚠️ Gagal memeriksa domain {domain}: {e}")
-        return False
-
-# ===== PROSES MINTING =====
 def mint_domain(wallet):
-    """Proses minting domain"""
+    """Proses minting dengan penyesuaian testnet"""
     addr = wallet['address']
     pk = wallet['private_key']
     
-    print(f"\n🔷 Memproses wallet: {addr}")
-    print(f"💳 Saldo: {Web3.from_wei(w3.eth.get_balance(addr), 'ether')} ETH")
+    print(f"\n🔷 Memproses wallet: {addr[:6]}...{addr[-4:]}")
+    print(f"💳 Saldo: {Web3.from_wei(w3.eth.get_balance(addr), 'ether')} {SYMBOL}")
 
     attempt = 0
     while attempt < MAX_RETRIES:
-        attempt += 1
-        domain = generate_valid_domain()
-        full_domain = f"{domain}.phrs"
+        domain = ''.join(random.choices(string.ascii_lowercase, k=random.randint(MIN_DOMAIN_LENGTH, MAX_DOMAIN_LENGTH)))
+        full_domain = f"{domain}.{SYMBOL.lower()}"
         
-        print(f"\n🔷 Percobaan #{attempt} | Domain: {full_domain}")
-
-        # 1. Periksa ketersediaan domain
-        if not check_domain_available(domain):
-            print(f"⚠️ Domain {full_domain} tidak tersedia")
-            time.sleep(2)
-            continue
-
-        # 2. Persiapkan data untuk commit
-        secret = secrets.token_bytes(32)
-        gas_price = get_gas_price()
-        nonce = w3.eth.get_transaction_count(addr)
+        print(f"\n🔷 Percobaan #{attempt+1}/{MAX_RETRIES}")
+        print(f"🌐 Domain: {full_domain}")
 
         try:
-            # 3. Buat commitment
-            print("⏳ Membuat commitment...")
+            # 1. Buat komitmen
+            secret = secrets.token_bytes(32)
             commitment = contract.functions.makeCommitment(
-                domain, 
-                addr, 
+                domain,
+                addr,
                 secret
             ).call()
 
-            # 4. Kirim commit transaction
-            print("⏳ Mengirim commit...")
+            # 2. Commit
             commit_tx = contract.functions.commit(commitment).build_transaction({
                 'from': addr,
-                'nonce': nonce,
+                'nonce': w3.eth.get_transaction_count(addr),
                 'gas': GAS_LIMIT_COMMIT,
-                'gasPrice': gas_price,
-                'chainId': w3.eth.chain_id
+                'gasPrice': get_gas_price(),
+                'chainId': CHAIN_ID
             })
 
             if not send_transaction(commit_tx, pk, "Commit"):
-                print("⚠️ Gagal commit, mencoba domain lain...")
-                time.sleep(5)
                 continue
 
-            # 5. Tunggu sebelum register
-            print(f"⏳ Menunggu {MIN_COMMIT_WAIT} detik sebelum register...")
+            # 3. Tunggu
+            print(f"⏳ Menunggu {MIN_COMMIT_WAIT} detik...")
             time.sleep(MIN_COMMIT_WAIT)
 
-            # 6. Proses register
-            print("⏳ Memproses register...")
-            nonce = w3.eth.get_transaction_count(addr)
+            # 4. Register
             register_tx = contract.functions.register(
                 domain,
                 addr,
                 secret,
-                31536000  # 1 tahun dalam detik
+                31536000  # 1 tahun
             ).build_transaction({
                 'from': addr,
-                'nonce': nonce,
+                'nonce': w3.eth.get_transaction_count(addr),
                 'gas': GAS_LIMIT_REGISTER,
-                'gasPrice': gas_price,
+                'gasPrice': get_gas_price(),
                 'value': REGISTRATION_FEE,
-                'chainId': w3.eth.chain_id
+                'chainId': CHAIN_ID
             })
 
             if send_transaction(register_tx, pk, "Register"):
-                print(f"🎉 Berhasil mendaftarkan domain: {full_domain}")
+                print(f"🎉 Sukses! Domain: {full_domain}")
                 return True
-            else:
-                print("⚠️ Gagal register, mencoba domain lain...")
 
         except Exception as e:
-            print(f"❌ Error fatal: {str(e)}")
+            print(f"⚠️ Error: {str(e)}")
             if "execution reverted" in str(e):
-                print("ℹ️ Kemungkinan domain tidak memenuhi syarat kontrak")
+                print("ℹ️ Kemungkinan domain tidak valid atau sudah terdaftar")
 
+        attempt += 1
         time.sleep(5)
     
-    print(f"❌ Gagal setelah {MAX_RETRIES} percobaan")
+    print("❌ Gagal setelah maksimal percobaan")
     return False
 
-# ===== MAIN EXECUTION =====
 if __name__ == '__main__':
     wallets = load_wallets()
-    if not wallets:
-        print("❌ Tidak ada wallet yang valid")
-        sys.exit(1)
-    
-    print(f"\n🔑 Memuat {len(wallets)} wallet")
+    print(f"\n🔑 Total wallet: {len(wallets)}")
     
     for wallet in wallets:
-        # Periksa saldo
         balance = w3.eth.get_balance(wallet['address'])
-        min_required = REGISTRATION_FEE + Web3.to_wei(0.01, 'ether')
-        
-        if balance < min_required:
-            print(f"\n⚠️ Saldo tidak cukup untuk {wallet['address']}")
-            print(f"   Dibutuhkan: {Web3.from_wei(min_required, 'ether')} ETH")
-            print(f"   Saldo saat ini: {Web3.from_wei(balance, 'ether')} ETH")
+        if balance < Web3.to_wei(0.02, 'ether'):  # Minimal 0.02 PHRS
+            print(f"⚠️ Saldo tidak cukup untuk {wallet['address'][:6]}...{wallet['address'][-4:]}")
             continue
             
-        print(f"\n💼 Memproses wallet: {wallet['address']}")
         mint_domain(wallet)
+        print("\n" + "="*50 + "\n")
