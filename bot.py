@@ -83,8 +83,7 @@ if not w3.is_connected():
 else:
     print(f"✅ Terhubung ke Pharos Testnet | Chain ID: {w3.eth.chain_id}")
 
-# ... (fungsi-fungsi lainnya tetap sama seperti sebelumnya)
-
+# ===== FUNGSI UTAMA =====
 def load_wallets():
     """Memuat wallet dari file teks"""
     try:
@@ -98,8 +97,100 @@ def load_wallets():
         print(f"❌ Gagal memuat akun: {e}")
         return []
 
-# ... (fungsi-fungsi lainnya seperti generate_valid_domain, get_gas_price, dll)
+def generate_valid_domain():
+    """Generate nama domain yang valid"""
+    length = random.randint(MIN_DOMAIN_LENGTH, MAX_DOMAIN_LENGTH)
+    return ''.join(random.choices(string.ascii_lowercase, k=length))
 
+def get_gas_price():
+    """Mendapatkan gas price"""
+    try:
+        return w3.eth.gas_price
+    except:
+        return Web3.to_wei(2, 'gwei')  # Default untuk testnet
+
+def send_transaction(tx, private_key, action_name=""):
+    """Mengirim transaksi"""
+    try:
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        print(f"⏳ {action_name} TX dikirim: {tx_hash.hex()}")
+        
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
+        if receipt.status == 1:
+            print(f"✅ {action_name} berhasil")
+            return True
+        else:
+            print(f"❌ {action_name} gagal")
+            return False
+    except ContractLogicError as e:
+        print(f"❌ Error kontrak: {e}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    return False
+
+def mint_domain(wallet):
+    """Proses utama untuk mint domain"""
+    address = wallet['address']
+    private_key = wallet['private_key']
+    
+    for attempt in range(MAX_RETRIES):
+        domain = generate_valid_domain()
+        print(f"\n🔷 Percobaan #{attempt + 1} | Domain: {domain}.phrs")
+        
+        try:
+            # 1. Buat komitmen
+            secret = secrets.token_bytes(32)
+            commitment = contract.functions.makeCommitment(
+                domain,
+                address,
+                secret
+            ).call()
+            
+            # 2. Commit
+            commit_tx = contract.functions.commit(commitment).build_transaction({
+                'from': address,
+                'nonce': w3.eth.get_transaction_count(address),
+                'gas': GAS_LIMIT_COMMIT,
+                'gasPrice': get_gas_price(),
+                'chainId': CHAIN_ID
+            })
+            
+            if not send_transaction(commit_tx, private_key, "Commit"):
+                continue
+                
+            # 3. Tunggu
+            print(f"⏳ Menunggu {MIN_COMMIT_WAIT} detik...")
+            time.sleep(MIN_COMMIT_WAIT)
+            
+            # 4. Register
+            register_tx = contract.functions.register(
+                domain,
+                address,
+                secret,
+                31536000  # 1 tahun
+            ).build_transaction({
+                'from': address,
+                'nonce': w3.eth.get_transaction_count(address),
+                'gas': GAS_LIMIT_REGISTER,
+                'gasPrice': get_gas_price(),
+                'value': REGISTRATION_FEE,
+                'chainId': CHAIN_ID
+            })
+            
+            if send_transaction(register_tx, private_key, "Register"):
+                print(f"🎉 Berhasil mendaftarkan domain: {domain}.phrs")
+                return True
+                
+        except Exception as e:
+            print(f"⚠️ Error: {e}")
+        
+        time.sleep(5)
+    
+    print("❌ Gagal setelah maksimal percobaan")
+    return False
+
+# ===== EKSEKUSI UTAMA =====
 if __name__ == '__main__':
     wallets = load_wallets()
     print(f"\n🔑 Memuat {len(wallets)} wallet")
