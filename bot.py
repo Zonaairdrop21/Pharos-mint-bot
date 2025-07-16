@@ -12,7 +12,7 @@ load_dotenv()
 
 # ===== KONFIGURASI =====
 RPC_URL = "https://testnet.dplabs-internal.com"
-CONTRACT_ADDRESS = "0x51Be1Ef20A1fD5179419738fC71D95a8B6F8A175"
+CONTRACT_ADDRESS = "0x51be1ef20a1fd5179419738fc71d95a8b6f8a175"
 CHAIN_ID = 688688  # Pharos Testnet Chain ID
 ACCOUNTS_FILE = "accounts.txt"
 MIN_DOMAIN_LENGTH = 3
@@ -22,44 +22,74 @@ GAS_LIMIT_COMMIT = 300000
 GAS_LIMIT_REGISTER = 500000
 REGISTRATION_FEE = Web3.to_wei(0.01, 'ether')
 MAX_RETRIES = 3
+RESOLVER = "0x9a43dcA1C3BB268546b98eb2AB1401bFc5b58505"
+DURATION = 31536000  # 1 tahun
+REVERSE_RECORD = True
+OWNER_CONTROLLED_FUSES = 0
+DATA = []
 
 # ===== ABI KONTRAK =====
 CONTRACT_ABI = [
     {
-        "inputs": [{"internalType": "bytes32", "name": "commitment", "type": "bytes32"}],
+        "constant": True,
+        "inputs": [
+            {"name": "name", "type": "string"},
+            {"name": "owner", "type": "address"},
+            {"name": "duration", "type": "uint256"},
+            {"name": "secret", "type": "bytes32"},
+            {"name": "resolver", "type": "address"},
+            {"name": "data", "type": "bytes[]"},
+            {"name": "reverseRecord", "type": "bool"},
+            {"name": "ownerControlledFuses", "type": "uint16"}
+        ],
+        "name": "makeCommitment",
+        "outputs": [{"name": "", "type": "bytes32"}],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "constant": False,
+        "inputs": [{"name": "commitment", "type": "bytes32"}],
         "name": "commit",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
     },
     {
+        "constant": True,
         "inputs": [
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "address", "name": "owner", "type": "address"},
-            {"internalType": "bytes32", "name": "secret", "type": "bytes32"},
-            {"internalType": "uint256", "name": "duration", "type": "uint256"}
+            {"name": "name", "type": "string"},
+            {"name": "duration", "type": "uint256"}
+        ],
+        "name": "rentPrice",
+        "outputs": [
+            {
+                "components": [
+                    {"name": "base", "type": "uint256"},
+                    {"name": "premium", "type": "uint256"}
+                ],
+                "name": "",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "constant": False,
+        "inputs": [
+            {"name": "name", "type": "string"},
+            {"name": "owner", "type": "address"},
+            {"name": "duration", "type": "uint256"},
+            {"name": "secret", "type": "bytes32"},
+            {"name": "resolver", "type": "address"},
+            {"name": "data", "type": "bytes[]"},
+            {"name": "reverseRecord", "type": "bool"},
+            {"name": "ownerControlledFuses", "type": "uint16"}
         ],
         "name": "register",
         "outputs": [],
         "stateMutability": "payable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {"internalType": "string", "name": "name", "type": "string"},
-            {"internalType": "address", "name": "owner", "type": "address"},
-            {"internalType": "bytes32", "name": "secret", "type": "bytes32"}
-        ],
-        "name": "makeCommitment",
-        "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
-        "stateMutability": "pure",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "string", "name": "name", "type": "string"}],
-        "name": "available",
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "view",
         "type": "function"
     }
 ]
@@ -144,7 +174,12 @@ def mint_domain(wallet):
             commitment = contract.functions.makeCommitment(
                 domain,
                 address,
-                secret
+                DURATION,
+                secret,
+                RESOLVER,
+                DATA,
+                REVERSE_RECORD,
+                OWNER_CONTROLLED_FUSES
             ).call()
             
             # 2. Commit
@@ -163,18 +198,26 @@ def mint_domain(wallet):
             print(f"⏳ Menunggu {MIN_COMMIT_WAIT} detik...")
             time.sleep(MIN_COMMIT_WAIT)
             
-            # 4. Register
+            # 4. Dapatkan harga sewa
+            rent_price = contract.functions.rentPrice(domain, DURATION).call()
+            total_cost = rent_price[0] + rent_price[1]  # base + premium
+            
+            # 5. Register
             register_tx = contract.functions.register(
                 domain,
                 address,
+                DURATION,
                 secret,
-                31536000  # 1 tahun
+                RESOLVER,
+                DATA,
+                REVERSE_RECORD,
+                OWNER_CONTROLLED_FUSES
             ).build_transaction({
                 'from': address,
                 'nonce': w3.eth.get_transaction_count(address),
                 'gas': GAS_LIMIT_REGISTER,
                 'gasPrice': get_gas_price(),
-                'value': REGISTRATION_FEE,
+                'value': total_cost,
                 'chainId': CHAIN_ID
             })
             
@@ -197,11 +240,12 @@ if __name__ == '__main__':
     
     for wallet in wallets:
         balance = w3.eth.get_balance(wallet['address'])
-        min_required = REGISTRATION_FEE + Web3.to_wei(0.01, 'ether')
+        # Perkiraan minimal yang dibutuhkan (akan diperiksa lagi saat registrasi)
+        min_required = Web3.to_wei(0.02, 'ether')  # Nilai konservatif
         
         if balance < min_required:
             print(f"\n⚠️ Saldo tidak cukup untuk {wallet['address']}")
-            print(f"   Dibutuhkan: {Web3.from_wei(min_required, 'ether')} PHRS")
+            print(f"   Dibutuhkan minimal: {Web3.from_wei(min_required, 'ether')} PHRS")
             print(f"   Saldo saat ini: {Web3.from_wei(balance, 'ether')} PHRS")
             continue
             
