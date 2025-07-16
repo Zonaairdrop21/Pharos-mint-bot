@@ -262,16 +262,16 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 'chainId': CONFIG['CHAIN_ID']
             })
             
-            # --- PENAMBAHAN DIAGNOSTIK DI SINI ---
             logger.debug(f"DEBUG: Tipe tx_commit sebelum sign: {type(tx_commit)}")
             signed_tx_commit = account.sign_transaction(tx_commit)
             logger.debug(f"DEBUG: Tipe signed_tx_commit setelah sign: {type(signed_tx_commit)}")
             logger.debug(f"DEBUG: Atribut signed_tx_commit: {dir(signed_tx_commit)}")
             
             try:
-                tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.rawTransaction)
+                # --- PERBAIKAN DI SINI: Ganti rawTransaction ke raw_transaction ---
+                tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction)
             except AttributeError as e:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses rawTransaction: {e}")
+                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses raw_transaction: {e}")
                 logger.error(f"DEBUG: signed_tx_commit type: {type(signed_tx_commit)}")
                 logger.error(f"DEBUG: signed_tx_commit dir: {dir(signed_tx_commit)}")
                 raise # Re-raise untuk memicu retry
@@ -314,16 +314,16 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 'chainId': CONFIG['CHAIN_ID']
             })
             
-            # --- PENAMBAHAN DIAGNOSTIK DI SINI ---
             logger.debug(f"DEBUG: Tipe tx_register sebelum sign: {type(tx_register)}")
             signed_tx_register = account.sign_transaction(tx_register)
             logger.debug(f"DEBUG: Tipe signed_tx_register setelah sign: {type(signed_tx_register)}")
             logger.debug(f"DEBUG: Atribut signed_tx_register: {dir(signed_tx_register)}")
 
             try:
-                tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.rawTransaction)
+                # --- PERBAIKAN DI SINI: Ganti rawTransaction ke raw_transaction ---
+                tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction)
             except AttributeError as e:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses rawTransaction: {e}")
+                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses raw_transaction: {e}")
                 logger.error(f"DEBUG: signed_tx_register type: {type(signed_tx_register)}")
                 logger.error(f"DEBUG: signed_tx_register dir: {dir(signed_tx_register)}")
                 raise # Re-raise untuk memicu retry
