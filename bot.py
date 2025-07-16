@@ -20,7 +20,6 @@ MAX_DOMAIN_LENGTH = 10
 MIN_COMMIT_WAIT = 60  # detik
 GAS_LIMIT_COMMIT = 300000
 GAS_LIMIT_REGISTER = 500000
-REGISTRATION_FEE = Web3.to_wei(0.01, 'ether')
 MAX_RETRIES = 3
 RESOLVER = "0x9a43dcA1C3BB268546b98eb2AB1401bFc5b58505"
 DURATION = 31536000  # 1 tahun
@@ -183,15 +182,14 @@ def mint_domain(wallet):
             ).call()
             
             # 2. Commit
-            commit_tx = {
+            commit_func = contract.functions.commit(commitment)
+            commit_tx = commit_func.build_transaction({
                 'from': address,
                 'nonce': w3.eth.get_transaction_count(address),
                 'gas': GAS_LIMIT_COMMIT,
                 'gasPrice': get_gas_price(),
-                'chainId': CHAIN_ID,
-                'to': CONTRACT_ADDRESS,
-                'data': contract.encodeABI(fn_name='commit', args=[commitment])
-            }
+                'chainId': CHAIN_ID
+            })
             
             if not send_transaction(commit_tx, private_key, "Commit"):
                 continue
@@ -205,28 +203,24 @@ def mint_domain(wallet):
             total_cost = rent_price[0] + rent_price[1]  # base + premium
             
             # 5. Register
-            register_tx = {
+            register_func = contract.functions.register(
+                domain,
+                address,
+                DURATION,
+                secret,
+                RESOLVER,
+                DATA,
+                REVERSE_RECORD,
+                OWNER_CONTROLLED_FUSES
+            )
+            register_tx = register_func.build_transaction({
                 'from': address,
                 'nonce': w3.eth.get_transaction_count(address),
                 'gas': GAS_LIMIT_REGISTER,
                 'gasPrice': get_gas_price(),
                 'value': total_cost,
-                'chainId': CHAIN_ID,
-                'to': CONTRACT_ADDRESS,
-                'data': contract.encodeABI(
-                    fn_name='register',
-                    args=[
-                        domain,
-                        address,
-                        DURATION,
-                        secret,
-                        RESOLVER,
-                        DATA,
-                        REVERSE_RECORD,
-                        OWNER_CONTROLLED_FUSES
-                    ]
-                )
-            }
+                'chainId': CHAIN_ID
+            })
             
             if send_transaction(register_tx, private_key, "Register"):
                 print(f"🎉 Berhasil mendaftarkan domain: {domain}.phrs")
