@@ -26,7 +26,6 @@ CONFIG = {
     'DATA': [],
     'REVERSE_RECORD': True,
     'OWNER_CONTROLLED_FUSES': 0,
-    # 'REG_PER_KEY' dan 'MAX_CONCURRENCY' akan diatur saat runtime
     'CHAIN_ID': 688688  # ID rantai untuk transaksi
 }
 
@@ -118,10 +117,8 @@ def random_name(length: int = 9) -> str:
     - Tidak ada tanda hubung ganda (misalnya "a--b").
     - Panjang nama domain akan sesuai dengan parameter 'length'.
     """
-    if length < 3:
-        # Menyesuaikan agar tidak keluar dari fungsi jika panjang kurang dari 3
-        # Biarkan saja dan perbaiki di dalam fungsi
-        pass 
+    if length < 3: 
+        length = 3 # Pastikan minimal 3 karakter
 
     chars_letters = string.ascii_lowercase
     chars_letters_digits = string.ascii_lowercase + string.digits
@@ -136,8 +133,8 @@ def random_name(length: int = 9) -> str:
             # Setelah tanda hubung harus huruf atau angka
             name_list.append(random.choice(chars_letters_digits))
         else:
-            # Bisa huruf, angka, atau tanda hubung (dengan probabilitas lebih tinggi untuk huruf/angka)
-            name_list.append(random.choice(chars_letters_digits + '-' * 1)) # '*'1 untuk mengurangi probabilitas '-'
+            # Bisa huruf, angka, atau tanda hubung. Kurangi probabilitas '-'
+            name_list.append(random.choice(chars_letters_digits + '-' * 1)) 
 
     # Karakter terakhir harus huruf atau angka
     if name_list[-1] == '-':
@@ -154,13 +151,27 @@ def random_name(length: int = 9) -> str:
             
     # Pastikan panjang akhir sesuai permintaan
     while len(cleaned_name) < length:
-        # Tambahkan karakter acak jika panjangnya berkurang setelah pembersihan
         if cleaned_name and cleaned_name[-1] == '-':
             cleaned_name.append(random.choice(chars_letters_digits))
         else:
             cleaned_name.append(random.choice(chars_letters_digits + '-'))
 
-    return ''.join(cleaned_name[:length]) # Potong jika lebih panjang dari yang diminta
+    # Jika setelah semua perbaikan, masih ada '-' di awal atau akhir (kasus langka tapi mungkin), perbaiki lagi
+    final_result = ''.join(cleaned_name[:length])
+    if final_result.startswith('-'):
+        final_result = random.choice(chars_letters_digits) + final_result[1:]
+    if final_result.endswith('-'):
+        final_result = final_result[:-1] + random.choice(chars_letters_digits)
+    
+    # Satu kali lagi cek jika ada double hyphen, kalau masih ada ganti
+    final_result = final_result.replace('--', random.choice(chars_letters_digits) + random.choice(chars_letters_digits))
+    
+    # Pastikan panjang tetap sesuai permintaan setelah perbaikan terakhir
+    while len(final_result) < length:
+        final_result += random.choice(chars_letters_digits)
+
+    return final_result[:length]
+
 
 def test_proxy(proxy: str) -> Tuple[str, bool]:
     """Menguji apakah proxy berfungsi dengan mencoba koneksi ke api.ipify.org."""
@@ -222,6 +233,7 @@ def register_domain_task(private_key: str, index: int, reg_index: int, proxy: st
 
     domain_registered = False
     name = "" # Inisialisasi nama di luar loop retry
+    
     while retry < MAX_RETRY:
         try:
             account = Account.from_key(private_key)
@@ -229,8 +241,8 @@ def register_domain_task(private_key: str, index: int, reg_index: int, proxy: st
             
             owner = account.address
             
-            # Buat nama domain baru hanya di percobaan pertama atau jika nama sebelumnya gagal
-            if retry == 0 or name == "":
+            # Buat nama domain baru hanya di percobaan pertama atau jika ada error spesifik
+            if retry == 0 or name == "": # Generasi nama baru hanya di percobaan pertama
                 name = random_name() 
             
             secret = HexBytes(os.urandom(32))
@@ -238,7 +250,7 @@ def register_domain_task(private_key: str, index: int, reg_index: int, proxy: st
             logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Wallet: {owner}, Nama domain: {name}.phrs")
 
             # 1. Buat commitment
-            # logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Membuat commitment untuk {name}.phrs...")
+            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Membuat commitment untuk {name}.phrs...")
             commitment = controller.functions.makeCommitment(
                 name,
                 owner,
@@ -249,39 +261,44 @@ def register_domain_task(private_key: str, index: int, reg_index: int, proxy: st
                 CONFIG['REVERSE_RECORD'],
                 CONFIG['OWNER_CONTROLLED_FUSES']
             ).call()
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Commitment dibuat.")
+            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Commitment {commitment.hex()} dibuat.")
 
             # 2. Kirim transaksi commit
-            # logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Mengirim transaksi commit...")
-            tx = controller.functions.commit(commitment).build_transaction({
+            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Mengirim transaksi commit...")
+            tx_commit = controller.functions.commit(commitment).build_transaction({
                 'from': owner,
                 'nonce': w3.eth.get_transaction_count(owner),
                 'gas': 200000,
                 'gasPrice': w3.eth.gas_price,
                 'chainId': CONFIG['CHAIN_ID']
             })
-            signed_tx = account.sign_transaction(tx)
-            tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+            signed_tx_commit = account.sign_transaction(tx_commit)
             
-            if receipt.status == 1:
-                logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Commitment berhasil. TX Hash: {tx_hash.hex()}")
+            # --- PERBAIKAN UTAMA DI SINI ---
+            # Pastikan Anda mengakses .rawTransaction dari objek signed_tx_commit
+            tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.rawTransaction)
+            
+            receipt_commit = w3.eth.wait_for_transaction_receipt(tx_hash_commit)
+            
+            if receipt_commit.status == 1:
+                logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Transaksi Commit berhasil! TX Hash: {tx_hash_commit.hex()}")
             else:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] Commitment gagal. TX Hash: {tx_hash.hex()}")
+                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] Transaksi Commit gagal. TX Hash: {tx_hash_commit.hex()}")
                 raise Exception("Transaksi commitment gagal.")
 
             # 3. Tunggu minCommitmentAge (60 detik)
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Menunggu 60 detik...")
+            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Menunggu 60 detik (minCommitmentAge)...")
             time.sleep(60)
 
             # 4. Hitung harga sewa domain
+            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Menghitung harga sewa untuk {name}.phrs...")
             price = controller.functions.rentPrice(name, CONFIG['DURATION']).call()
             value = price[0] + price[1]
             logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Harga sewa: {w3.from_wei(value, 'ether')} ETH.")
 
             # 5. Kirim transaksi pendaftaran
-            # logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Mengirim transaksi pendaftaran...")
-            tx = controller.functions.register(
+            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Mengirim transaksi pendaftaran...")
+            tx_register = controller.functions.register(
                 name,
                 owner,
                 CONFIG['DURATION'],
@@ -298,23 +315,30 @@ def register_domain_task(private_key: str, index: int, reg_index: int, proxy: st
                 'value': value,
                 'chainId': CONFIG['CHAIN_ID']
             })
-            signed_tx = account.sign_transaction(tx)
-            tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+            signed_tx_register = account.sign_transaction(tx_register)
             
-            if receipt.status == 1:
-                logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Pendaftaran {name}.phrs berhasil! TX Hash: {tx_hash.hex()}")
+            # --- PERBAIKAN UTAMA DI SINI ---
+            # Pastikan Anda mengakses .rawTransaction dari objek signed_tx_register
+            tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.rawTransaction)
+            
+            receipt_register = w3.eth.wait_for_transaction_receipt(tx_hash_register)
+            
+            if receipt_register.status == 1:
+                logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Pendaftaran {name}.phrs berhasil! TX Hash: {tx_hash_register.hex()}")
                 domain_registered = True
                 break
             else:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] Pendaftaran {name}.phrs gagal. TX Hash: {tx_hash.hex()}")
+                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] Pendaftaran {name}.phrs gagal. TX Hash: {tx_hash_register.hex()}")
                 raise Exception("Transaksi pendaftaran gagal.")
 
         except Exception as err:
             retry += 1
             msg = str(err)[:150] + '...' if len(str(err)) > 150 else str(err)
             if retry < MAX_RETRY:
-                logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Error: {msg} - mencoba lagi ({retry}/{MAX_RETRY}) dalam 60 detik...")
+                # Untuk kasus error 'SignedTransaction' object has no attribute 'rawTransaction',
+                # ini biasanya berarti masalah dengan objeknya sendiri, bukan network.
+                # Namun, untuk kasus umum, coba lagi masih relevan.
+                logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Error saat memproses {name}.phrs: {msg} - mencoba lagi ({retry}/{MAX_RETRY}) dalam 60 detik...")
                 time.sleep(60)
             else:
                 logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] Gagal mendaftarkan {name}.phrs setelah {MAX_RETRY} percobaan: {msg}")
@@ -346,10 +370,9 @@ Success: {success_count}
 Failed: {failed_count}
 Processed: {current_tasks_processed}/{total_tasks}
 """)
-    # Ini hanya dashboard umum, detail per akun akan tetap di logger
 
 def main():
-    """Fungsi utama untuk menjalankan proses pendaftaran domain."""
+    """Fungsi utama untuk menjalankan proses pendaftaran domain secara paralel."""
     global success_count, failed_count, total_tasks, current_tasks_processed
 
     clear_screen()
@@ -367,18 +390,14 @@ def main():
         raw_proxy_list = load_file_lines("proxy.txt")
         if not raw_proxy_list:
             logger.warning("Tidak ditemukan proxy di 'proxy.txt'. Akan berjalan tanpa proxy.")
-            use_proxy_option = '2' # Otomatis ganti ke mode tanpa proxy
+            use_proxy_option = '2'
         else:
             logger.info(f"Menguji {len(raw_proxy_list)} proxy yang ditemukan...")
-            # Menentukan max_workers untuk pengujian proxy
             proxy_test_workers = min(len(raw_proxy_list), os.cpu_count() * 2 if os.cpu_count() else 10)
-            
-            # Jika proxy_test_workers bisa 0 (misal raw_proxy_list kosong), ini menyebabkan error.
-            # Pastikan minimal 1 jika ada proxy yang akan diuji.
             if proxy_test_workers == 0 and len(raw_proxy_list) > 0:
-                 proxy_test_workers = 1 # Minimal 1 worker jika ada proxy untuk diuji
+                 proxy_test_workers = 1 
 
-            if proxy_test_workers > 0: # Hanya buat thread pool jika ada worker
+            if proxy_test_workers > 0:
                 with ThreadPoolExecutor(max_workers=proxy_test_workers) as executor:
                     tested_proxies_results = list(executor.map(test_proxy, raw_proxy_list))
                 proxy_list = [p for p, success in tested_proxies_results if success]
@@ -389,8 +408,7 @@ def main():
             else:
                 logger.info(f"{len(proxy_list)} proxy berfungsi dan akan digunakan.")
 
-    # Memuat kunci pribadi dari accounts.txt
-    pk_list = load_file_lines("accounts.txt") # Mengubah dari pk.txt ke accounts.txt
+    pk_list = load_file_lines("accounts.txt")
     
     if not pk_list:
         logger.error("Tidak ditemukan kunci pribadi di 'accounts.txt'. Pastikan file ada dan berisi kunci pribadi.")
@@ -419,14 +437,12 @@ def main():
         input("Tekan Enter untuk keluar...")
         return
 
-    # Reset global counters
     success_count = 0
     failed_count = 0
     current_tasks_processed = 0
 
-    # Membangun daftar tugas: (kunci_pribadi, indeks_wallet, indeks_pendaftaran_untuk_wallet_ini)
     tasks = [(pk, idx, i + 1) for idx, pk in enumerate(pk_list) for i in range(CONFIG['REG_PER_KEY'])]
-    random.shuffle(tasks) # Acak urutan tugas
+    random.shuffle(tasks)
     total_tasks = len(tasks)
 
     print_progress() # Tampilkan dashboard awal
@@ -442,11 +458,10 @@ def main():
             
             futures.append(executor.submit(register_domain_task, pk, idx, reg_idx, chosen_proxy))
         
-        # Tunggu semua tugas selesai
         for future in futures:
-            future.result() # Mengambil hasil (atau menangani pengecualian)
+            future.result()
 
-    print_progress() # Tampilkan dashboard akhir
+    print_progress()
     logger.info("Semua tugas pendaftaran domain telah selesai!")
     input("Tekan Enter untuk keluar...")
 
