@@ -29,7 +29,7 @@ CONFIG = {
     'CHAIN_ID': 688688  # ID rantai untuk transaksi
 }
 
-# ABI minimal untuk kontrak controller (tidak berubah)
+# ABI minimal untuk kontrak controller (sesuai yang Anda berikan)
 CONTROLLER_ABI = [
     {
         "constant": True,
@@ -139,7 +139,7 @@ def random_name(length: int = 9) -> str:
 
     cleaned_name = []
     for i, char in enumerate(name_list):
-        if char == '-' and i > 0 and cleaned_name[-1] == '-':
+        if char == '-' and i > 0 and cleaned_name and cleaned_name[-1] == '-':
             cleaned_name.append(random.choice(chars_letters_digits))
         else:
             cleaned_name.append(char)
@@ -261,10 +261,21 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 'gasPrice': w3.eth.gas_price,
                 'chainId': CONFIG['CHAIN_ID']
             })
+            
+            # --- PENAMBAHAN DIAGNOSTIK DI SINI ---
+            logger.debug(f"DEBUG: Tipe tx_commit sebelum sign: {type(tx_commit)}")
             signed_tx_commit = account.sign_transaction(tx_commit)
+            logger.debug(f"DEBUG: Tipe signed_tx_commit setelah sign: {type(signed_tx_commit)}")
+            logger.debug(f"DEBUG: Atribut signed_tx_commit: {dir(signed_tx_commit)}")
             
-            tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.rawTransaction)
-            
+            try:
+                tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.rawTransaction)
+            except AttributeError as e:
+                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses rawTransaction: {e}")
+                logger.error(f"DEBUG: signed_tx_commit type: {type(signed_tx_commit)}")
+                logger.error(f"DEBUG: signed_tx_commit dir: {dir(signed_tx_commit)}")
+                raise # Re-raise untuk memicu retry
+
             receipt_commit = w3.eth.wait_for_transaction_receipt(tx_hash_commit)
             
             if receipt_commit.status == 1:
@@ -302,9 +313,20 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 'value': value,
                 'chainId': CONFIG['CHAIN_ID']
             })
-            signed_tx_register = account.sign_transaction(tx_register)
             
-            tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.rawTransaction)
+            # --- PENAMBAHAN DIAGNOSTIK DI SINI ---
+            logger.debug(f"DEBUG: Tipe tx_register sebelum sign: {type(tx_register)}")
+            signed_tx_register = account.sign_transaction(tx_register)
+            logger.debug(f"DEBUG: Tipe signed_tx_register setelah sign: {type(signed_tx_register)}")
+            logger.debug(f"DEBUG: Atribut signed_tx_register: {dir(signed_tx_register)}")
+
+            try:
+                tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.rawTransaction)
+            except AttributeError as e:
+                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses rawTransaction: {e}")
+                logger.error(f"DEBUG: signed_tx_register type: {type(signed_tx_register)}")
+                logger.error(f"DEBUG: signed_tx_register dir: {dir(signed_tx_register)}")
+                raise # Re-raise untuk memicu retry
             
             receipt_register = w3.eth.wait_for_transaction_receipt(tx_hash_register)
             
@@ -321,11 +343,6 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             msg = str(err)[:150] + '...' if len(str(err)) > 150 else str(err)
             logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Error saat memproses {name}.phrs: {msg} - mencoba lagi ({retry}/{MAX_RETRY}) dalam 60 detik...")
             time.sleep(60)
-            
-            # Jika ini error 'rawTransaction', nama domain yang sama kemungkinan akan gagal lagi.
-            # Jadi, kita mungkin ingin menghasilkan nama baru jika error spesifik ini terjadi.
-            # Namun, untuk menjaga konsistensi dengan pola retry umum, kita biarkan nama sama.
-            # Jika Anda ingin nama baru setelah error rawTransaction, beri tahu saya.
                 
     with processed_lock:
         if domain_registered:
@@ -424,18 +441,14 @@ def main():
     failed_count = 0
     current_tasks_processed = 0
 
-    # Membangun daftar tugas: (kunci_pribadi, indeks_wallet, indeks_pendaftaran_untuk_wallet_ini)
-    # Setiap entri di tasks_to_process adalah SATU siklus Commit+Register
     tasks_to_process = [(pk, idx, i + 1) for idx, pk in enumerate(pk_list) for i in range(CONFIG['REG_PER_KEY'])]
-    random.shuffle(tasks_to_process) # Acak urutan tugas
+    random.shuffle(tasks_to_process)
     total_tasks = len(tasks_to_process)
 
-    print_progress() # Tampilkan dashboard awal
+    print_progress()
 
     logger.info(f"Memulai pendaftaran domain untuk {len(pk_list)} akun, total {total_tasks} pendaftaran.")
     
-    # Menggunakan ThreadPoolExecutor untuk menjalankan setiap siklus Commit+Register secara paralel
-    # Ini berarti setiap thread akan menjalankan satu instance register_domain_single_task() dari awal sampai selesai.
     with ThreadPoolExecutor(max_workers=CONFIG['MAX_CONCURRENCY']) as executor:
         futures = []
         for pk, idx, reg_idx in tasks_to_process:
@@ -443,18 +456,20 @@ def main():
             if use_proxy_option == '1' and proxy_list:
                 chosen_proxy = random.choice(proxy_list)
             
-            # Submit setiap siklus Commit+Register sebagai tugas terpisah
             futures.append(executor.submit(register_domain_single_task, pk, idx, reg_idx, chosen_proxy))
         
-        # Tunggu semua tugas selesai
         for future in futures:
-            future.result() # Mengambil hasil (atau menangani pengecualian)
+            try:
+                future.result()
+            except Exception as e:
+                logger.error(f"Error fatal di salah satu tugas: {e}. Bot mungkin perlu di-restart.")
 
     print_progress()
     logger.info("Semua tugas pendaftaran domain telah selesai!")
     input("Tekan Enter untuk keluar...")
 
 if __name__ == "__main__":
+    logging.getLogger(__name__).setLevel(logging.DEBUG) # Mengatur level logger ke DEBUG
     clear_screen()
     logger.info("Bot pendaftar domain dimulai. Pastikan 'accounts.txt' dan 'proxy.txt' (opsional) tersedia.")
     while True:
@@ -462,6 +477,6 @@ if __name__ == "__main__":
             main()
             break
         except Exception as err:
-            logger.error(f"Terjadi error fatal di fungsi utama (main): {str(err)}")
+            logger.critical(f"Terjadi error SANGAT FATAL di fungsi utama (main) yang tidak tertangani: {str(err)}")
             logger.info("Menunggu 60 detik sebelum mencoba lagi semua proses...")
             time.sleep(60)
