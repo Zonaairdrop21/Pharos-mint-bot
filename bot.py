@@ -13,9 +13,54 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 from urllib3.exceptions import HTTPError
 
-# Konfigurasi logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+# Import untuk tampilan dan waktu
+from colorama import init, Fore, Style
+from datetime import datetime
+import asyncio # Digunakan untuk fungsi display_welcome_screen()
+
+# Inisialisasi colorama untuk dukungan warna di terminal
+init(autoreset=True)
+
+# === Terminal Color Setup ===
+class Colors:
+    RESET = Style.RESET_ALL
+    BOLD = Style.BRIGHT
+    GREEN = Fore.GREEN
+    YELLOW = Fore.YELLOW
+    RED = Fore.RED
+    CYAN = Fore.CYAN
+    MAGENTA = Fore.MAGENTA
+    WHITE = Fore.WHITE
+    BRIGHT_GREEN = Fore.LIGHTGREEN_EX
+    BRIGHT_MAGENTA = Fore.LIGHTMAGENTA_EX
+    BRIGHT_WHITE = Fore.LIGHTWHITE_EX
+    BRIGHT_BLACK = Fore.LIGHTBLACK_EX
+
+class CustomLogger:
+    @staticmethod
+    def log(label, symbol, msg, color):
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        print(f"{Colors.BRIGHT_BLACK}[{timestamp}]{Colors.RESET} {color}[{symbol}] {msg}{Colors.RESET}")
+
+    @staticmethod
+    def info(msg): CustomLogger.log("INFO", "✓", msg, Colors.GREEN)
+    @staticmethod
+    def warn(msg): CustomLogger.log("WARN", "!", msg, Colors.YELLOW)
+    @staticmethod
+    def error(msg): CustomLogger.log("ERR", "✗", msg, Colors.RED)
+    @staticmethod
+    def success(msg): CustomLogger.log("OK", "+", msg, Colors.GREEN)
+    @staticmethod
+    def loading(msg): CustomLogger.log("LOAD", "⟳", msg, Colors.CYAN)
+    @staticmethod
+    def step(msg): CustomLogger.log("STEP", "➤", msg, Colors.WHITE)
+    @staticmethod
+    def commit_action(msg): CustomLogger.log("COMMIT", "↪️", msg, Colors.CYAN) # Custom for commit
+    @staticmethod
+    def register_success(msg): CustomLogger.log("REGISTER", "✅", msg, Colors.BRIGHT_GREEN) # Custom for register success
+
+# Ganti logger bawaan dengan custom logger
+logger = CustomLogger()
 
 # Konfigurasi dasar (beberapa akan diatur oleh input pengguna)
 CONFIG = {
@@ -170,7 +215,8 @@ def test_proxy(proxy: str) -> Tuple[str, bool]:
         response = requests.get('https://api.ipify.org', proxies={'http': proxy, 'https': proxy}, timeout=5)
         return proxy, response.status_code == 200
     except (requests.RequestException, HTTPError) as e:
-        logger.debug(f"Proxy {proxy} gagal diuji: {e}")
+        # Menggunakan logger.warn bukan logger.debug untuk proxy yang gagal agar terlihat
+        logger.warn(f"Proxy {proxy} gagal diuji: {e}") 
         return proxy, False
 
 def create_web3_instance(proxy: str = None) -> Web3:
@@ -228,6 +274,8 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
     domain_registered = False
     name = random_name() # Nama domain dihasilkan di sini untuk setiap percobaan
 
+    wallet_log_prefix = f"Wallet #{index+1} | Percobaan {reg_index} | {name}.phrs"
+
     while retry < MAX_RETRY:
         try:
             account = Account.from_key(private_key)
@@ -236,10 +284,10 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             owner = account.address
             secret = HexBytes(os.urandom(32))
             
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Memulai pendaftaran {name}.phrs...")
+            logger.step(f"Memulai pendaftaran {wallet_log_prefix}...")
 
             # 1. Buat commitment
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] COMMIT untuk {name}.phrs - Membuat commitment...")
+            logger.commit_action(f"COMMIT {wallet_log_prefix} - Membuat commitment...")
             commitment = controller.functions.makeCommitment(
                 name,
                 owner,
@@ -250,10 +298,9 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 CONFIG['REVERSE_RECORD'],
                 CONFIG['OWNER_CONTROLLED_FUSES']
             ).call()
-            # logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] Commitment {commitment.hex()} dibuat.")
-
+            
             # 2. Kirim transaksi commit
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] COMMIT untuk {name}.phrs - Mengirim transaksi...")
+            logger.commit_action(f"COMMIT {wallet_log_prefix} - Mengirim transaksi...")
             tx_commit = controller.functions.commit(commitment).build_transaction({
                 'from': owner,
                 'nonce': w3.eth.get_transaction_count(owner),
@@ -262,47 +309,42 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 'chainId': CONFIG['CHAIN_ID']
             })
             
-            logger.debug(f"DEBUG: Tipe tx_commit sebelum sign: {type(tx_commit)}")
             signed_tx_commit = account.sign_transaction(tx_commit)
-            logger.debug(f"DEBUG: Tipe signed_tx_commit setelah sign: {type(signed_tx_commit)}")
-            logger.debug(f"DEBUG: Atribut signed_tx_commit: {dir(signed_tx_commit)}")
             
             try:
                 tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction)
             except AttributeError as e:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses raw_transaction: {e}")
-                logger.error(f"DEBUG: signed_tx_commit type: {type(signed_tx_commit)}")
-                logger.error(f"DEBUG: signed_tx_commit dir: {dir(signed_tx_commit)}")
+                logger.error(f"[KRITIS] Gagal akses raw_transaction untuk {wallet_log_prefix}: {e}")
                 raise # Re-raise untuk memicu retry
-            except ValueError as e: # Tangani jika ada error dari node RPC (misal nonce out of order)
+            except ValueError as e: 
                  if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
-                     logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Nonce error atau transaksi sudah ada di pool, mencoba lagi dengan nonce baru.")
-                     tx_commit['nonce'] = w3.eth.get_transaction_count(owner) # Update nonce
-                     signed_tx_commit = account.sign_transaction(tx_commit) # Sign ulang
-                     tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction) # Kirim ulang
+                     logger.warn(f"Nonce error atau transaksi sudah ada di pool untuk {wallet_log_prefix}, mencoba lagi dengan nonce baru.")
+                     tx_commit['nonce'] = w3.eth.get_transaction_count(owner) 
+                     signed_tx_commit = account.sign_transaction(tx_commit) 
+                     tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction) 
                  else:
-                     raise # Re-raise error lain
+                     raise 
 
             receipt_commit = w3.eth.wait_for_transaction_receipt(tx_hash_commit)
             
             if receipt_commit.status == 1:
-                logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] COMMIT untuk {name}.phrs - Berhasil! TX Hash: {tx_hash_commit.hex()}")
+                logger.info(f"COMMIT {wallet_log_prefix} - Berhasil! TX Hash: {tx_hash_commit.hex()}")
             else:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] COMMIT untuk {name}.phrs - Gagal. TX Hash: {tx_hash_commit.hex()}")
+                logger.error(f"COMMIT {wallet_log_prefix} - Gagal. TX Hash: {tx_hash_commit.hex()}")
                 raise Exception("Transaksi commitment gagal.")
 
             # 3. Tunggu minCommitmentAge (60 detik)
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] MENUNGGU 60 detik untuk {name}.phrs...")
+            logger.loading(f"MENUNGGU 60 detik untuk {wallet_log_prefix}...")
             time.sleep(60)
 
             # 4. Hitung harga sewa domain
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] REGISTER untuk {name}.phrs - Menghitung harga sewa...")
+            logger.step(f"REGISTER {wallet_log_prefix} - Menghitung harga sewa...")
             price = controller.functions.rentPrice(name, CONFIG['DURATION']).call()
             value = price[0] + price[1]
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] REGISTER untuk {name}.phrs - Harga sewa: {w3.from_wei(value, 'ether')} ETH.")
+            logger.info(f"REGISTER {wallet_log_prefix} - Harga sewa: {w3.from_wei(value, 'ether')} ETH.")
 
             # 5. Kirim transaksi pendaftaran
-            logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] REGISTER untuk {name}.phrs - Mengirim transaksi...")
+            logger.step(f"REGISTER {wallet_log_prefix} - Mengirim transaksi...")
             tx_register = controller.functions.register(
                 name,
                 owner,
@@ -321,41 +363,36 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 'chainId': CONFIG['CHAIN_ID']
             })
             
-            logger.debug(f"DEBUG: Tipe tx_register sebelum sign: {type(tx_register)}")
             signed_tx_register = account.sign_transaction(tx_register)
-            logger.debug(f"DEBUG: Tipe signed_tx_register setelah sign: {type(signed_tx_register)}")
-            logger.debug(f"DEBUG: Atribut signed_tx_register: {dir(signed_tx_register)}")
 
             try:
                 tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction)
             except AttributeError as e:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses raw_transaction: {e}")
-                logger.error(f"DEBUG: signed_tx_register type: {type(signed_tx_register)}")
-                logger.error(f"DEBUG: signed_tx_register dir: {dir(signed_tx_register)}")
-                raise # Re-raise untuk memicu retry
-            except ValueError as e: # Tangani jika ada error dari node RPC
+                logger.error(f"[KRITIS] Gagal akses raw_transaction untuk {wallet_log_prefix}: {e}")
+                raise 
+            except ValueError as e: 
                  if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
-                     logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Nonce error atau transaksi sudah ada di pool, mencoba lagi dengan nonce baru.")
-                     tx_register['nonce'] = w3.eth.get_transaction_count(owner) # Update nonce
-                     signed_tx_register = account.sign_transaction(tx_register) # Sign ulang
-                     tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction) # Kirim ulang
+                     logger.warn(f"Nonce error atau transaksi sudah ada di pool untuk {wallet_log_prefix}, mencoba lagi dengan nonce baru.")
+                     tx_register['nonce'] = w3.eth.get_transaction_count(owner) 
+                     signed_tx_register = account.sign_transaction(tx_register) 
+                     tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction) 
                  else:
-                     raise # Re-raise error lain
+                     raise 
             
             receipt_register = w3.eth.wait_for_transaction_receipt(tx_hash_register)
             
             if receipt_register.status == 1:
-                logger.info(f"[Wallet #{index+1} | Percobaan {reg_index}] REGISTER untuk {name}.phrs - BERHASIL! TX Hash: {tx_hash_register.hex()}")
+                logger.register_success(f"REGISTER {wallet_log_prefix} - BERHASIL! Domain {name}.phrs Terdaftar! TX Hash: {tx_hash_register.hex()}")
                 domain_registered = True
                 break
             else:
-                logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] REGISTER untuk {name}.phrs - GAGAL. TX Hash: {tx_hash_register.hex()}")
+                logger.error(f"REGISTER {wallet_log_prefix} - GAGAL. TX Hash: {tx_hash_register.hex()}")
                 raise Exception("Transaksi pendaftaran gagal.")
 
         except Exception as err:
             retry += 1
             msg = str(err)[:150] + '...' if len(str(err)) > 150 else str(err)
-            logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Error saat memproses {name}.phrs: {msg} - mencoba lagi ({retry}/{MAX_RETRY}) dalam 60 detik...")
+            logger.warn(f"Error saat memproses {wallet_log_prefix}: {msg} - mencoba lagi ({retry}/{MAX_RETRY}) dalam 60 detik...")
             time.sleep(60)
                 
     with processed_lock:
@@ -370,40 +407,56 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
 def print_progress():
     """Mencetak status progres ke konsol."""
     clear_screen()
-    current_time_str = time.strftime("%H:%M:%S %d.%m.%y")
+    current_time_str = datetime.now().strftime("%H:%M:%S %d.%m.%y")
     
     print(f"""
+{Colors.BRIGHT_GREEN}{Colors.BOLD}
 [ WARDEN BOT ]
 {current_time_str}
 
 Automated Protocol Utility
-by ZonaAirdrop (@ZonaAirdrop)
+by {Colors.BRIGHT_WHITE}@ZonaAirdrop{Colors.BRIGHT_GREEN}
 
 Total Tasks: {total_tasks}
 Success: {success_count}
 Failed: {failed_count}
 Processed: {current_tasks_processed}/{total_tasks}
+{Colors.RESET}
 """)
+
+async def display_welcome_screen():
+    clear_screen()
+    now = datetime.now()
+    print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
+    print("  ╔══════════════════════════════════════╗")
+    print("  ║         P H A R O S  B O T           ║") # Ganti nama bot jika perlu
+    print("  ║                                      ║")
+    print(f"  ║      {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}        ║")
+    print("  ║                                      ║")
+    print("  ║     PHAROS TESTNET AUTOMATION        ║")
+    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}   |  t.me/ZonaAirdr0p  ║")
+    print("  ╚══════════════════════════════════════╝")
+    print(f"{Colors.RESET}")
+    # await asyncio.sleep(1) # Hapus jika tidak ingin ada jeda sebelum menu muncul
 
 def main():
     """Fungsi utama untuk menjalankan proses pendaftaran domain secara paralel."""
     global success_count, failed_count, total_tasks, current_tasks_processed
 
-    clear_screen()
-    print("====================================")
-    print("     PHAROS MINT BOT")
-    print("====================================")
-    print("[1] Jalankan dengan Proxy Pribadi")
-    print("[2] Jalankan tanpa Proxy")
-    print("====================================")
+    asyncio.run(display_welcome_screen()) # Tampilkan welcome screen
 
-    use_proxy_option = input("Pilih opsi (1 atau 2): ").strip()
+    print("\n" + Styles.BRIGHT_WHITE + "="*36 + Styles.RESET_ALL)
+    print("  " + Styles.BRIGHT_GREEN + "[1] Run with Private Proxy" + Styles.RESET_ALL)
+    print("  " + Styles.BRIGHT_RED + "[2] Run without Proxy" + Styles.RESET_ALL)
+    print(Styles.BRIGHT_WHITE + "="*36 + Styles.RESET_ALL)
+
+    use_proxy_option = input(f"{Colors.BRIGHT_CYAN}Choose an option (1 or 2): {Colors.RESET}").strip()
     
     proxy_list = []
     if use_proxy_option == '1':
         raw_proxy_list = load_file_lines("proxy.txt")
         if not raw_proxy_list:
-            logger.warning("Tidak ditemukan proxy di 'proxy.txt'. Akan berjalan tanpa proxy.")
+            logger.warn("Tidak ditemukan proxy di 'proxy.txt'. Akan berjalan tanpa proxy.")
             use_proxy_option = '2'
         else:
             logger.info(f"Menguji {len(raw_proxy_list)} proxy yang ditemukan...")
@@ -417,7 +470,7 @@ def main():
                 proxy_list = [p for p, success in tested_proxies_results if success]
             
             if not proxy_list:
-                logger.warning("Tidak ada proxy yang berfungsi dari 'proxy.txt'. Bot akan berjalan tanpa proxy.")
+                logger.warn("Tidak ada proxy yang berfungsi dari 'proxy.txt'. Bot akan berjalan tanpa proxy.")
                 use_proxy_option = '2'
             else:
                 logger.info(f"{len(proxy_list)} proxy berfungsi dan akan digunakan.")
@@ -429,9 +482,9 @@ def main():
         input("Tekan Enter untuk keluar...")
         return
 
-    print(f"\nTotal Akun yang ditemukan: {len(pk_list)}")
+    logger.info(f"Total Akun yang ditemukan: {len(pk_list)}")
 
-    reg_per_key_str = input("Mau berapa domain yang ingin di-generate per akun? (misal: 1): ").strip()
+    reg_per_key_str = input(f"{Colors.BRIGHT_CYAN}Mau berapa domain yang ingin di-generate per akun? (misal: 1): {Colors.RESET}").strip()
     try:
         CONFIG['REG_PER_KEY'] = int(reg_per_key_str)
         if CONFIG['REG_PER_KEY'] <= 0:
@@ -441,10 +494,7 @@ def main():
         input("Tekan Enter untuk keluar...")
         return
     
-    # === PERUBAHAN KRITIS DI SINI ===
-    # Untuk alur satu per satu secara keseluruhan, MAX_CONCURRENCY harus 1.
-    # Namun, saya akan tetap memberikan opsi input kepada user, dengan penjelasan.
-    max_concurrency_str = input("Masukkan jumlah thread/konkurensi maksimal (misal: 1 untuk alur satu per satu, >1 untuk paralel antar akun/tugas): ").strip()
+    max_concurrency_str = input(f"{Colors.BRIGHT_CYAN}Masukkan jumlah thread/konkurensi maksimal (misal: 1 untuk alur satu per satu, >1 untuk paralel antar akun/tugas): {Colors.RESET}").strip()
     try:
         CONFIG['MAX_CONCURRENCY'] = int(max_concurrency_str)
         if CONFIG['MAX_CONCURRENCY'] <= 0:
@@ -466,7 +516,6 @@ def main():
 
     logger.info(f"Memulai pendaftaran domain untuk {len(pk_list)} akun, total {total_tasks} pendaftaran.")
     
-    # Gunakan ThreadPoolExecutor dengan max_workers sesuai input pengguna
     with ThreadPoolExecutor(max_workers=CONFIG['MAX_CONCURRENCY']) as executor:
         futures = []
         for pk, idx, reg_idx in tasks_to_process:
@@ -487,9 +536,18 @@ def main():
     input("Tekan Enter untuk keluar...")
 
 if __name__ == "__main__":
-    logging.getLogger(__name__).setLevel(logging.INFO) # Mengatur level logger kembali ke INFO untuk log lebih bersih
-    # Atau tetap DEBUG jika ingin melihat diagnostik rinci saat debugging
-    # logging.getLogger(__name__).setLevel(logging.DEBUG) 
+    # Logging bawaan Python tidak digunakan untuk output utama karena kita pakai CustomLogger
+    # Tetapi jika ada kebutuhan debug dari pustaka lain, bisa diaktifkan
+    logging.getLogger().setLevel(logging.CRITICAL) # Set level sangat tinggi agar tidak ada log dari web3.py dll.
+    
+    # Perbaikan untuk Styles di main()
+    class Styles: # Mendefinisikan Styles agar tidak error
+        BRIGHT_WHITE = Style.BRIGHT + Fore.WHITE
+        BRIGHT_GREEN = Style.BRIGHT + Fore.GREEN
+        BRIGHT_RED = Style.BRIGHT + Fore.RED
+        BRIGHT_CYAN = Style.BRIGHT + Fore.CYAN
+        RESET_ALL = Style.RESET_ALL
+
     clear_screen()
     logger.info("Bot pendaftar domain dimulai. Pastikan 'accounts.txt' dan 'proxy.txt' (opsional) tersedia.")
     while True:
@@ -497,6 +555,6 @@ if __name__ == "__main__":
             main()
             break
         except Exception as err:
-            logger.critical(f"Terjadi error SANGAT FATAL di fungsi utama (main) yang tidak tertangani: {str(err)}")
+            logger.error(f"Terjadi error FATAL di fungsi utama (main) yang tidak tertangani: {str(err)}")
             logger.info("Menunggu 60 detik sebelum mencoba lagi semua proses...")
             time.sleep(60)
