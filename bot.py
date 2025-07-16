@@ -29,7 +29,7 @@ CONFIG = {
     'CHAIN_ID': 688688  # ID rantai untuk transaksi
 }
 
-# ABI minimal untuk kontrak controller (sesuai yang Anda berikan)
+# ABI minimal untuk kontrak controller
 CONTROLLER_ABI = [
     {
         "constant": True,
@@ -268,13 +268,20 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             logger.debug(f"DEBUG: Atribut signed_tx_commit: {dir(signed_tx_commit)}")
             
             try:
-                # --- PERBAIKAN DI SINI: Ganti rawTransaction ke raw_transaction ---
                 tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction)
             except AttributeError as e:
                 logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses raw_transaction: {e}")
                 logger.error(f"DEBUG: signed_tx_commit type: {type(signed_tx_commit)}")
                 logger.error(f"DEBUG: signed_tx_commit dir: {dir(signed_tx_commit)}")
                 raise # Re-raise untuk memicu retry
+            except ValueError as e: # Tangani jika ada error dari node RPC (misal nonce out of order)
+                 if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
+                     logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Nonce error atau transaksi sudah ada di pool, mencoba lagi dengan nonce baru.")
+                     tx_commit['nonce'] = w3.eth.get_transaction_count(owner) # Update nonce
+                     signed_tx_commit = account.sign_transaction(tx_commit) # Sign ulang
+                     tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction) # Kirim ulang
+                 else:
+                     raise # Re-raise error lain
 
             receipt_commit = w3.eth.wait_for_transaction_receipt(tx_hash_commit)
             
@@ -320,13 +327,20 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             logger.debug(f"DEBUG: Atribut signed_tx_register: {dir(signed_tx_register)}")
 
             try:
-                # --- PERBAIKAN DI SINI: Ganti rawTransaction ke raw_transaction ---
                 tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction)
             except AttributeError as e:
                 logger.error(f"[Wallet #{index+1} | Percobaan {reg_index}] KRITIS: Gagal akses raw_transaction: {e}")
                 logger.error(f"DEBUG: signed_tx_register type: {type(signed_tx_register)}")
                 logger.error(f"DEBUG: signed_tx_register dir: {dir(signed_tx_register)}")
                 raise # Re-raise untuk memicu retry
+            except ValueError as e: # Tangani jika ada error dari node RPC
+                 if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
+                     logger.warning(f"[Wallet #{index+1} | Percobaan {reg_index}] Nonce error atau transaksi sudah ada di pool, mencoba lagi dengan nonce baru.")
+                     tx_register['nonce'] = w3.eth.get_transaction_count(owner) # Update nonce
+                     signed_tx_register = account.sign_transaction(tx_register) # Sign ulang
+                     tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction) # Kirim ulang
+                 else:
+                     raise # Re-raise error lain
             
             receipt_register = w3.eth.wait_for_transaction_receipt(tx_hash_register)
             
@@ -427,7 +441,10 @@ def main():
         input("Tekan Enter untuk keluar...")
         return
     
-    max_concurrency_str = input("Masukkan jumlah thread/konkurensi maksimal (misal: 10): ").strip()
+    # === PERUBAHAN KRITIS DI SINI ===
+    # Untuk alur satu per satu secara keseluruhan, MAX_CONCURRENCY harus 1.
+    # Namun, saya akan tetap memberikan opsi input kepada user, dengan penjelasan.
+    max_concurrency_str = input("Masukkan jumlah thread/konkurensi maksimal (misal: 1 untuk alur satu per satu, >1 untuk paralel antar akun/tugas): ").strip()
     try:
         CONFIG['MAX_CONCURRENCY'] = int(max_concurrency_str)
         if CONFIG['MAX_CONCURRENCY'] <= 0:
@@ -449,6 +466,7 @@ def main():
 
     logger.info(f"Memulai pendaftaran domain untuk {len(pk_list)} akun, total {total_tasks} pendaftaran.")
     
+    # Gunakan ThreadPoolExecutor dengan max_workers sesuai input pengguna
     with ThreadPoolExecutor(max_workers=CONFIG['MAX_CONCURRENCY']) as executor:
         futures = []
         for pk, idx, reg_idx in tasks_to_process:
@@ -469,7 +487,9 @@ def main():
     input("Tekan Enter untuk keluar...")
 
 if __name__ == "__main__":
-    logging.getLogger(__name__).setLevel(logging.DEBUG) # Mengatur level logger ke DEBUG
+    logging.getLogger(__name__).setLevel(logging.INFO) # Mengatur level logger kembali ke INFO untuk log lebih bersih
+    # Atau tetap DEBUG jika ingin melihat diagnostik rinci saat debugging
+    # logging.getLogger(__name__).setLevel(logging.DEBUG) 
     clear_screen()
     logger.info("Bot pendaftar domain dimulai. Pastikan 'accounts.txt' dan 'proxy.txt' (opsional) tersedia.")
     while True:
