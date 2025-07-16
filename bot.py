@@ -264,6 +264,8 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
     w3 = create_web3_instance(proxy)
     
     try:
+        account = Account.from_key(private_key)
+        owner_address = account.address
         controller_address = w3.to_checksum_address(CONFIG['CONTROLLER_ADDRESS'])
         resolver_address = w3.to_checksum_address(CONFIG['RESOLVER'])
     except ValueError as e:
@@ -276,14 +278,21 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
     domain_registered = False
     name = random_name() # Domain name generated here for each attempt
 
-    wallet_log_prefix = f"Wallet #{index+1} | Attempt {reg_index} | {name}.phrs"
+    wallet_log_prefix = f"Wallet #{index+1} ({owner_address[:6]}...{owner_address[-4:]}) | Attempt {reg_index} | {name}.phrs"
+
+    # Fetch and display wallet balance at the start of each task
+    try:
+        balance_wei = w3.eth.get_balance(owner_address)
+        balance_eth = w3.from_wei(balance_wei, 'ether')
+        logger.info(f"[{wallet_log_prefix}] Current Balance: {balance_eth:.4f} ETH")
+    except Exception as e:
+        logger.warn(f"[{wallet_log_prefix}] Could not fetch balance: {e}")
+
 
     while retry < MAX_RETRY:
         try:
-            account = Account.from_key(private_key)
             controller = w3.eth.contract(address=controller_address, abi=CONTROLLER_ABI)
             
-            owner = account.address
             secret = HexBytes(os.urandom(32))
             
             logger.step(f"Starting registration for {wallet_log_prefix}...")
@@ -292,7 +301,7 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             logger.commit_action(f"COMMIT {wallet_log_prefix} - Creating commitment...")
             commitment = controller.functions.makeCommitment(
                 name,
-                owner,
+                owner_address,
                 CONFIG['DURATION'],
                 secret,
                 resolver_address,
@@ -304,8 +313,8 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             # 2. Send commit transaction
             logger.commit_action(f"COMMIT {wallet_log_prefix} - Sending transaction...")
             tx_commit = controller.functions.commit(commitment).build_transaction({
-                'from': owner,
-                'nonce': w3.eth.get_transaction_count(owner),
+                'from': owner_address,
+                'nonce': w3.eth.get_transaction_count(owner_address),
                 'gas': 200000,
                 'gasPrice': w3.eth.gas_price,
                 'chainId': CONFIG['CHAIN_ID']
@@ -321,7 +330,7 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             except ValueError as e: 
                  if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
                      logger.warn(f"Nonce error or transaction already in pool for {wallet_log_prefix}, retrying with new nonce.")
-                     tx_commit['nonce'] = w3.eth.get_transaction_count(owner) 
+                     tx_commit['nonce'] = w3.eth.get_transaction_count(owner_address) 
                      signed_tx_commit = account.sign_transaction(tx_commit) 
                      tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction) 
                  else:
@@ -349,7 +358,7 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             logger.step(f"REGISTER {wallet_log_prefix} - Sending transaction...")
             tx_register = controller.functions.register(
                 name,
-                owner,
+                owner_address,
                 CONFIG['DURATION'],
                 secret,
                 resolver_address,
@@ -357,8 +366,8 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
                 CONFIG['REVERSE_RECORD'],
                 CONFIG['OWNER_CONTROLLED_FUSES']
             ).build_transaction({
-                'from': owner,
-                'nonce': w3.eth.get_transaction_count(owner),
+                'from': owner_address,
+                'nonce': w3.eth.get_transaction_count(owner_address),
                 'gas': 300000,
                 'gasPrice': w3.eth.gas_price,
                 'value': value,
@@ -375,7 +384,7 @@ def register_domain_single_task(private_key: str, index: int, reg_index: int, pr
             except ValueError as e: 
                  if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
                      logger.warn(f"Nonce error or transaction already in pool for {wallet_log_prefix}, retrying with new nonce.")
-                     tx_register['nonce'] = w3.eth.get_transaction_count(owner) 
+                     tx_register['nonce'] = w3.eth.get_transaction_count(owner_address) 
                      signed_tx_register = account.sign_transaction(tx_register) 
                      tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction) 
                  else:
