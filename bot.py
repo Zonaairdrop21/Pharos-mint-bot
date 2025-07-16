@@ -32,6 +32,9 @@ class Colors:
     MAGENTA = Fore.MAGENTA
     WHITE = Fore.WHITE
     BRIGHT_GREEN = Fore.LIGHTGREEN_EX
+    BRIGHT_YELLOW = Fore.LIGHTYELLOW_EX # Tambahkan jika ingin Bright Yellow
+    BRIGHT_RED = Fore.LIGHTRED_EX     # Tambahkan jika ingin Bright Red
+    BRIGHT_CYAN = Fore.LIGHTCYAN_EX   # <--- BARIS YANG HILANG DAN SUDAH DITAMBAHKAN
     BRIGHT_MAGENTA = Fore.LIGHTMAGENTA_EX
     BRIGHT_WHITE = Fore.LIGHTWHITE_EX
     BRIGHT_BLACK = Fore.LIGHTBLACK_EX
@@ -215,7 +218,6 @@ def test_proxy(proxy: str) -> Tuple[str, bool]:
         response = requests.get('https://api.ipify.org', proxies={'http': proxy, 'https': proxy}, timeout=5)
         return proxy, response.status_code == 200
     except (requests.RequestException, HTTPError) as e:
-        # Menggunakan logger.warn bukan logger.debug untuk proxy yang gagal agar terlihat
         logger.warn(f"Proxy {proxy} gagal diuji: {e}") 
         return proxy, False
 
@@ -445,10 +447,11 @@ def main():
 
     asyncio.run(display_welcome_screen()) # Tampilkan welcome screen
 
-    print("\n" + Styles.BRIGHT_WHITE + "="*36 + Styles.RESET_ALL)
-    print("  " + Styles.BRIGHT_GREEN + "[1] Run with Private Proxy" + Styles.RESET_ALL)
-    print("  " + Styles.BRIGHT_RED + "[2] Run without Proxy" + Styles.RESET_ALL)
-    print(Styles.BRIGHT_WHITE + "="*36 + Styles.RESET_ALL)
+    # Menggunakan Colors class secara langsung
+    print("\n" + Colors.BRIGHT_WHITE + "="*36 + Colors.RESET)
+    print("  " + Colors.BRIGHT_GREEN + "[1] Run with Private Proxy" + Colors.RESET)
+    print("  " + Colors.BRIGHT_RED + "[2] Run without Proxy" + Colors.RESET)
+    print(Colors.BRIGHT_WHITE + "="*36 + Colors.RESET)
 
     use_proxy_option = input(f"{Colors.BRIGHT_CYAN}Choose an option (1 or 2): {Colors.RESET}").strip()
     
@@ -537,17 +540,8 @@ def main():
 
 if __name__ == "__main__":
     # Logging bawaan Python tidak digunakan untuk output utama karena kita pakai CustomLogger
-    # Tetapi jika ada kebutuhan debug dari pustaka lain, bisa diaktifkan
     logging.getLogger().setLevel(logging.CRITICAL) # Set level sangat tinggi agar tidak ada log dari web3.py dll.
     
-    # Perbaikan untuk Styles di main()
-    class Styles: # Mendefinisikan Styles agar tidak error
-        BRIGHT_WHITE = Style.BRIGHT + Fore.WHITE
-        BRIGHT_GREEN = Style.BRIGHT + Fore.GREEN
-        BRIGHT_RED = Style.BRIGHT + Fore.RED
-        BRIGHT_CYAN = Style.BRIGHT + Fore.CYAN
-        RESET_ALL = Style.RESET_ALL
-
     clear_screen()
     logger.info("Bot pendaftar domain dimulai. Pastikan 'accounts.txt' dan 'proxy.txt' (opsional) tersedia.")
     while True:
