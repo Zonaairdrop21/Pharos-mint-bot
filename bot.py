@@ -183,13 +183,15 @@ def mint_domain(wallet):
             ).call()
             
             # 2. Commit
-            commit_tx = contract.functions.commit(commitment).build_transaction({
+            commit_tx = {
                 'from': address,
                 'nonce': w3.eth.get_transaction_count(address),
                 'gas': GAS_LIMIT_COMMIT,
                 'gasPrice': get_gas_price(),
-                'chainId': CHAIN_ID
-            })
+                'chainId': CHAIN_ID,
+                'to': CONTRACT_ADDRESS,
+                'data': contract.encodeABI(fn_name='commit', args=[commitment])
+            }
             
             if not send_transaction(commit_tx, private_key, "Commit"):
                 continue
@@ -203,23 +205,28 @@ def mint_domain(wallet):
             total_cost = rent_price[0] + rent_price[1]  # base + premium
             
             # 5. Register
-            register_tx = contract.functions.register(
-                domain,
-                address,
-                DURATION,
-                secret,
-                RESOLVER,
-                DATA,
-                REVERSE_RECORD,
-                OWNER_CONTROLLED_FUSES
-            ).build_transaction({
+            register_tx = {
                 'from': address,
                 'nonce': w3.eth.get_transaction_count(address),
                 'gas': GAS_LIMIT_REGISTER,
                 'gasPrice': get_gas_price(),
                 'value': total_cost,
-                'chainId': CHAIN_ID
-            })
+                'chainId': CHAIN_ID,
+                'to': CONTRACT_ADDRESS,
+                'data': contract.encodeABI(
+                    fn_name='register',
+                    args=[
+                        domain,
+                        address,
+                        DURATION,
+                        secret,
+                        RESOLVER,
+                        DATA,
+                        REVERSE_RECORD,
+                        OWNER_CONTROLLED_FUSES
+                    ]
+                )
+            }
             
             if send_transaction(register_tx, private_key, "Register"):
                 print(f"🎉 Berhasil mendaftarkan domain: {domain}.phrs")
