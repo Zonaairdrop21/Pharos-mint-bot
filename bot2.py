@@ -47,9 +47,9 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def swap(msg): Logger.log("SWAP", "↪️", msg, Colors.CYAN)
+    def Tx(msg): Logger.log("Hash", "↪️", msg, Colors.CYAN)
     @staticmethod
-    def swapSuccess(msg): Logger.log("SWAP", "✅", msg, Colors.GREEN)
+    def Explorer(msg): Logger.log("ExplorerHash", "✅", msg, Colors.GREEN)
 
 logger = Logger()
 
