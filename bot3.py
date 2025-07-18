@@ -47,7 +47,10 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    
+    def txHash(msg): Logger.log("TX", "↪️", msg, Colors.CYAN) # Mengubah nama dari swap menjadi txHash
+    @staticmethod
+    def txSuccess(msg): Logger.log("TX", "✅", msg, Colors.GREEN) # Mengubah nama dari swapSuccess menjadi txSuccess
+
 logger = Logger()
 
 def clear_console():
@@ -318,7 +321,7 @@ class Brokex:
         for attempt in range(retries):
             try:
                 signed_tx = web3.eth.account.sign_transaction(tx, account)
-                raw_tx = web3.eth.send_raw_transaction(signed_tx.raw_transaction)
+                raw_tx = web3.eth.send_raw_transaction(signed_tx.raw_tx)
                 tx_hash = web3.to_hex(raw_tx)
                 return tx_hash
             except TransactionNotFound:
@@ -423,8 +426,8 @@ class Brokex:
 
                 logger.success(f"Approve: Success")
                 logger.info(f"Block: {block_number}")
-                logger.swap(f"Tx Hash: {tx_hash}")
-                logger.swapSuccess(f"Explorer: {explorer}")
+                logger.txHash(f"Tx Hash: {tx_hash}") # Mengubah dari logger.swap menjadi logger.txHash
+                logger.txSuccess(f"Explorer: {explorer}") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
                 await asyncio.sleep(5)
 
             return True
@@ -804,10 +807,10 @@ class Brokex:
             if tx_hash and block_number:
                 explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-                logger.swapSuccess(f"USDT Faucet Claimed Successfully")
+                logger.txSuccess(f"USDT Faucet Claimed Successfully") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
                 logger.info(f"Block: {block_number}")
-                logger.swap(f"Tx Hash: {tx_hash}")
-                logger.swapSuccess(f"Explorer: {explorer}")
+                logger.txHash(f"Tx Hash: {tx_hash}") # Mengubah dari logger.swap menjadi logger.txHash
+                logger.txSuccess(f"Explorer: {explorer}") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
             else:
                 logger.error(f"Perform On-Chain Failed")
         else:
@@ -818,10 +821,10 @@ class Brokex:
         if tx_hash and block_number:
             explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-            logger.swapSuccess(f"Trade Success")
+            logger.txSuccess(f"Trade Success") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}")
-            logger.swapSuccess(f"Explorer: {explorer}")
+            logger.txHash(f"Tx Hash: {tx_hash}") # Mengubah dari logger.swap menjadi logger.txHash
+            logger.txSuccess(f"Explorer: {explorer}") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -830,10 +833,10 @@ class Brokex:
         if tx_hash and block_number:
             explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-            logger.swapSuccess(f"Deposit Liquidity Success")
+            logger.txSuccess(f"Deposit Liquidity Success") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}")
-            logger.swapSuccess(f"Explorer: {explorer}")
+            logger.txHash(f"Tx Hash: {tx_hash}") # Mengubah dari logger.swap menjadi logger.txHash
+            logger.txSuccess(f"Explorer: {explorer}") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -842,10 +845,10 @@ class Brokex:
         if tx_hash and block_number:
             explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-            logger.swapSuccess(f"Withdraw Liquidity Success")
+            logger.txSuccess(f"Withdraw Liquidity Success") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}")
-            logger.swapSuccess(f"Explorer: {explorer}")
+            logger.txHash(f"Tx Hash: {tx_hash}") # Mengubah dari logger.swap menjadi logger.txHash
+            logger.txSuccess(f"Explorer: {explorer}") # Mengubah dari logger.swapSuccess menjadi logger.txSuccess
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -919,17 +922,14 @@ class Brokex:
 
             self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
 
-        # Garis separator di atas di sini dihapus
-        # print(f"{Colors.CYAN + Colors.BOLD}{separator}[ {Colors.WHITE + Colors.BOLD}{self.mask_account(address)} {Colors.CYAN + Colors.BOLD}]{separator}{Colors.RESET}")
-        
-        logger.info(f"Processing Account: {self.mask_account(address)}") # Menambahkan log untuk akun yang sedang diproses
+        logger.info(f"Processing Account: {self.mask_account(address)}")
 
         if not address:
             logger.error(f"Status: Invalid Private Key or Library Version Not Supported")
             return
 
         await self.process_option_1(account, address, use_proxy)
-        await asyncio.sleep(5) # Delay setelah faucet, sebelum aksi lain
+        await asyncio.sleep(5)
 
         if option == 2:
             logger.step(f"Option: Random Trade")
@@ -952,8 +952,8 @@ class Brokex:
                 await self.process_option_3(account, address, use_proxy)
             elif self.lp_option == 2:
                 await self.process_option_4(account, address, use_proxy)
-        
-        logger.success(f"All tasks for account {self.mask_account(address)} completed!") # Pesan selesai per akun
+
+        logger.success(f"All tasks for account {self.mask_account(address)} completed!")
 
     async def main(self):
         try:
@@ -964,10 +964,10 @@ class Brokex:
 
             while True:
                 use_proxy = False
-                if use_proxy_choice == 1: # Now corresponds to private proxy
+                if use_proxy_choice == 1:
                     use_proxy = True
 
-                await display_welcome_screen() # Call the new welcome screen
+                await display_welcome_screen()
                 logger.info(f"Account's Total: {len(accounts)}")
 
                 if use_proxy:
@@ -978,23 +978,23 @@ class Brokex:
                         address = self.generate_address(account)
 
                         await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
-                        await asyncio.sleep(3) # Jeda antar akun
-                
-                # Pesan "All Task Completed" sebelum timer
-                logger.swapSuccess("All Task Completed ✅")
-                seconds = 24 * 60 * 60 # 24 jam
+                        await asyncio.sleep(3)
+
+                print(f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} {Colors.GREEN}[✅] All Task Completed ✅")
+
+                seconds = 24 * 60 * 60
                 while seconds > 0:
                     formatted_time = self.format_seconds(seconds)
                     print(
                         f"{Colors.BRIGHT_BLACK}[ Wait for {Colors.WHITE+Colors.BOLD}{formatted_time} {Colors.BRIGHT_BLACK}... ]{Colors.RESET}"
                         f"{Colors.WHITE+Colors.BOLD} | {Colors.RESET}"
-                        f"{Colors.BLUE+Colors.BOLD}All Accounts Have Been Processed.{Colors.RESET}",
+                        f"{Colors.BLUE+Colors.BOLD}All Tasks Completed.{Colors.RESET}",
                         end="\r"
                     )
                     await asyncio.sleep(1)
                     seconds -= 1
-                clear_console() # Clear console setelah timer habis
-                await display_welcome_screen() # Tampilkan welcome screen lagi
+                clear_console()
+                await display_welcome_screen()
 
         except FileNotFoundError:
             logger.error(f"File 'accounts.txt' Not Found.")
