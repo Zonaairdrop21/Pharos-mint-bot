@@ -47,9 +47,9 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def swap(msg): Logger.log("SWAP", "↪️", msg, Colors.CYAN)
+    def action(msg): Logger.log("ACTION", "↪️", msg, Colors.CYAN)
     @staticmethod
-    def swapSuccess(msg): Logger.log("SWAP", "✅", msg, Colors.GREEN)
+    def actionSuccess(msg): Logger.log("ACTION", "✅", msg, Colors.GREEN)
         
 logger = Logger()
 
@@ -426,8 +426,8 @@ class Brokex:
 
                 logger.success(f"Approve: Success")
                 logger.info(f"Block: {block_number}")
-                logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-                logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+                logger.action(f"Tx Hash: {tx_hash}")
+                logger.actionSuccess(f"Explorer: {explorer}")
                 await asyncio.sleep(5)
 
             return True
@@ -807,10 +807,10 @@ class Brokex:
             if tx_hash and block_number:
                 explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-                logger.swapSuccess(f"USDT Faucet Claimed Successfully")
+                logger.actionSuccess(f"USDT Faucet Claimed Successfully")
                 logger.info(f"Block: {block_number}")
-                logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-                logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+                logger.action(f"Tx Hash: {tx_hash}")
+                logger.actionSuccess(f"Explorer: {explorer}")
             else:
                 logger.error(f"Perform On-Chain Failed")
         else:
@@ -821,10 +821,10 @@ class Brokex:
         if tx_hash and block_number:
             explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-            logger.swapSuccess(f"Trade Success")
+            logger.actionSuccess(f"Trade Success")
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+            logger.action(f"Tx Hash: {tx_hash}")
+            logger.actionSuccess(f"Explorer: {explorer}")
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -833,10 +833,10 @@ class Brokex:
         if tx_hash and block_number:
             explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-            logger.swapSuccess(f"Deposit Liquidity Success")
+            logger.actionSuccess(f"Deposit Liquidity Success")
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+            logger.action(f"Tx Hash: {tx_hash}")
+            logger.actionSuccess(f"Explorer: {explorer}")
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -845,10 +845,10 @@ class Brokex:
         if tx_hash and block_number:
             explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
 
-            logger.swapSuccess(f"Withdraw Liquidity Success")
+            logger.actionSuccess(f"Withdraw Liquidity Success")
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+            logger.action(f"Tx Hash: {tx_hash}")
+            logger.actionSuccess(f"Explorer: {explorer}")
         else:
             logger.error(f"Perform On-Chain Failed")
 
