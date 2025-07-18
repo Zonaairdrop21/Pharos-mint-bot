@@ -1001,7 +1001,7 @@ class Brokex:
                     formatted_time = self.format_seconds(seconds)
                     print(
                         f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} "
-                        f"{Colors.CYAN}[⟳] All Task Completeed Next cycle in: {formatted_time}",
+                        f"{Colors.CYAN}[⟳] Task Completeed Next cycle in: {formatted_time}",
                         end="\r",
                         flush=True
                     )
