@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 init(autoreset=True)
 load_dotenv()
 
-# === Terminal Color Setup ===
 class Colors:
     RESET = Style.RESET_ALL
     BOLD = Style.BRIGHT
@@ -61,11 +60,11 @@ async def display_welcome_screen():
     now = datetime.now()
     print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
     print("  ╔══════════════════════════════════════╗")
-    print("  ║           D Z A P   B O T            ║")
+    print("  ║           Brokex  B O T            ║")
     print("  ║                                      ║")
     print(f"  ║      {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}          ║")
     print("  ║                                      ║")
-    print("  ║      MONAD TESTNET AUTOMATION        ║")
+    print("  ║      PHAROS TESTNET AUTOMATION        ║")
     print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p   ║")
     print("  ╚══════════════════════════════════════╝")
     print(f"{Colors.RESET}")
@@ -991,11 +990,10 @@ class Brokex:
                 
                 # Modified countdown logic
                 seconds = 24 * 60 * 60 # Start with 24 hours
-                
-                # Initial display for "All Task Completeed"
-                initial_time_str = self.format_seconds(seconds)
-                print(f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} {Colors.GREEN}[✓] {initial_time_str} All Task Completeed 🗿", end="\r", flush=True)
-                await asyncio.sleep(1) 
+                start_time_str = datetime.now(wib).strftime('%H:%M:%S')
+
+                print(f"{Colors.BRIGHT_BLACK}[{start_time_str}]{Colors.RESET} {Colors.GREEN}[✓] 23:59:59 All Task Completeed 🗿", end="\r", flush=True)
+                await asyncio.sleep(1) # Initial display for one second
 
                 seconds -= 1 # Decrement for the actual countdown
 
@@ -1003,7 +1001,7 @@ class Brokex:
                     formatted_time = self.format_seconds(seconds)
                     print(
                         f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} "
-                        f"{Colors.CYAN}[⟳] All Task Completeed Next cycle in: {formatted_time}", # Added "All Task Completeed" here
+                        f"{Colors.CYAN}[⟳] Next cycle in: {formatted_time}",
                         end="\r",
                         flush=True
                     )
