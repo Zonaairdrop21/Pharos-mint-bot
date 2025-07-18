@@ -988,15 +988,23 @@ class Brokex:
 
                         await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
                         await asyncio.sleep(3)
+                
+                # Modified countdown logic
+                seconds = 24 * 60 * 60 # Start with 24 hours
+                start_time_str = datetime.now(wib).strftime('%H:%M:%S')
 
-                seconds = 24 * 60 * 60
-                while seconds > 0:
+                print(f"{Colors.BRIGHT_BLACK}[{start_time_str}]{Colors.RESET} {Colors.GREEN}[✓] 23:59:59 All Task Completeed 🗿", end="\r", flush=True)
+                await asyncio.sleep(1) # Initial display for one second
+
+                seconds -= 1 # Decrement for the actual countdown
+
+                while seconds >= 0:
                     formatted_time = self.format_seconds(seconds)
                     print(
-                        f"{Colors.BRIGHT_BLACK}[ Wait for {Colors.WHITE+Colors.BOLD}{formatted_time} {Colors.BRIGHT_BLACK}... ]{Colors.RESET}"
-                        f"{Colors.WHITE+Colors.BOLD} | {Colors.RESET}"
-                        f"{Colors.BLUE+Colors.BOLD}All Accounts Have Been Processed.{Colors.RESET}",
-                        end="\r"
+                        f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} "
+                        f"{Colors.CYAN}[⟳] Next cycle in: {formatted_time}",
+                        end="\r",
+                        flush=True
                     )
                     await asyncio.sleep(1)
                     seconds -= 1
