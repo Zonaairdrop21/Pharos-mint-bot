@@ -426,8 +426,8 @@ class Brokex:
 
                 logger.success(f"Approve: Success")
                 logger.info(f"Block: {block_number}")
-                logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-                logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+                logger.swap(f"Tx Hash: {tx_hash}")
+                logger.swapSuccess(f"Explorer: {explorer}")
                 await asyncio.sleep(5)
 
             return True
@@ -809,8 +809,8 @@ class Brokex:
 
                 logger.swapSuccess(f"USDT Faucet Claimed Successfully")
                 logger.info(f"Block: {block_number}")
-                logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-                logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+                logger.swap(f"Tx Hash: {tx_hash}")
+                logger.swapSuccess(f"Explorer: {explorer}")
             else:
                 logger.error(f"Perform On-Chain Failed")
         else:
@@ -823,8 +823,8 @@ class Brokex:
 
             logger.swapSuccess(f"Trade Success")
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+            logger.swap(f"Tx Hash: {tx_hash}")
+            logger.swapSuccess(f"Explorer: {explorer}")
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -835,8 +835,8 @@ class Brokex:
 
             logger.swapSuccess(f"Deposit Liquidity Success")
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+            logger.swap(f"Tx Hash: {tx_hash}")
+            logger.swapSuccess(f"Explorer: {explorer}")
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -847,8 +847,8 @@ class Brokex:
 
             logger.swapSuccess(f"Withdraw Liquidity Success")
             logger.info(f"Block: {block_number}")
-            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
-            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
+            logger.swap(f"Tx Hash: {tx_hash}")
+            logger.swapSuccess(f"Explorer: {explorer}")
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -922,40 +922,41 @@ class Brokex:
 
             self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
 
-        if option == 1:
-            logger.step(f"Option: Claim Faucet")
+        # Garis separator di atas di sini dihapus
+        # print(f"{Colors.CYAN + Colors.BOLD}{separator}[ {Colors.WHITE + Colors.BOLD}{self.mask_account(address)} {Colors.CYAN + Colors.BOLD}]{separator}{Colors.RESET}")
+        
+        logger.info(f"Processing Account: {self.mask_account(address)}") # Menambahkan log untuk akun yang sedang diproses
 
-            await self.process_option_1(account, address, use_proxy)
+        if not address:
+            logger.error(f"Status: Invalid Private Key or Library Version Not Supported")
+            return
 
-        elif option == 2:
+        await self.process_option_1(account, address, use_proxy)
+        await asyncio.sleep(5) # Delay setelah faucet, sebelum aksi lain
+
+        if option == 2:
             logger.step(f"Option: Random Trade")
-
             await self.process_option_2(account, address, use_proxy)
 
         elif option == 3:
             logger.step(f"Option: Deposit Liquidity")
-
             await self.process_option_3(account, address, use_proxy)
 
         elif option == 4:
             logger.step(f"Option: Withdraw Liquidity")
-
             await self.process_option_4(account, address, use_proxy)
 
-        else:
+        elif option == 5:
             logger.step(f"Option: Run All Features")
-
-            await self.process_option_1(account, address, use_proxy)
-            await asyncio.sleep(5)
-
             await self.process_option_2(account, address, use_proxy)
             await asyncio.sleep(5)
 
             if self.lp_option == 1:
                 await self.process_option_3(account, address, use_proxy)
-
             elif self.lp_option == 2:
                 await self.process_option_4(account, address, use_proxy)
+        
+        logger.success(f"All tasks for account {self.mask_account(address)} completed!") # Pesan selesai per akun
 
     async def main(self):
         try:
@@ -975,23 +976,16 @@ class Brokex:
                 if use_proxy:
                     await self.load_proxies(use_proxy_choice)
 
-                separator = "=" * 25
                 for account in accounts:
                     if account:
                         address = self.generate_address(account)
 
-                        print(f"{Colors.CYAN + Colors.BOLD}{separator}[ {Colors.WHITE + Colors.BOLD}{self.mask_account(address)} {Colors.CYAN + Colors.BOLD}]{separator}{Colors.RESET}")
-
-
-                        if not address:
-                            logger.error(f"Status: Invalid Private Key or Library Version Not Supported")
-                            continue
-
                         await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
-                        await asyncio.sleep(3)
-
-                logger.info("="*72)
-                seconds = 24 * 60 * 60
+                        await asyncio.sleep(3) # Jeda antar akun
+                
+                # Pesan "All Task Completed" sebelum timer
+                logger.swapSuccess("All Task Completed ✅")
+                seconds = 24 * 60 * 60 # 24 jam
                 while seconds > 0:
                     formatted_time = self.format_seconds(seconds)
                     print(
@@ -1002,6 +996,8 @@ class Brokex:
                     )
                     await asyncio.sleep(1)
                     seconds -= 1
+                clear_console() # Clear console setelah timer habis
+                await display_welcome_screen() # Tampilkan welcome screen lagi
 
         except FileNotFoundError:
             logger.error(f"File 'accounts.txt' Not Found.")
