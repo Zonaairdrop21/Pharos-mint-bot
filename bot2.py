@@ -991,10 +991,11 @@ class Brokex:
                 
                 # Modified countdown logic
                 seconds = 24 * 60 * 60 # Start with 24 hours
-                start_time_str = datetime.now(wib).strftime('%H:%M:%S')
-
-                print(f"{Colors.BRIGHT_BLACK}[{start_time_str}]{Colors.RESET} {Colors.GREEN}[✓] 23:59:59 All Task Completeed 🗿", end="\r", flush=True)
-                await asyncio.sleep(1) # Initial display for one second
+                
+                # Initial display for "All Task Completeed"
+                initial_time_str = self.format_seconds(seconds)
+                print(f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} {Colors.GREEN}[✓] {initial_time_str} All Task Completeed 🗿", end="\r", flush=True)
+                await asyncio.sleep(1) 
 
                 seconds -= 1 # Decrement for the actual countdown
 
@@ -1002,7 +1003,7 @@ class Brokex:
                     formatted_time = self.format_seconds(seconds)
                     print(
                         f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} "
-                        f"{Colors.CYAN}[⟳] Next cycle in: {formatted_time}",
+                        f"{Colors.CYAN}[⟳] All Task Completeed Next cycle in: {formatted_time}", # Added "All Task Completeed" here
                         end="\r",
                         flush=True
                     )
