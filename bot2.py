@@ -992,19 +992,23 @@ class Brokex:
                 # Modified countdown logic
                 seconds = 24 * 60 * 60 # Start with 24 hours
                 
+                # Initial display for "All Task Completeed"
+                initial_time_str = self.format_seconds(seconds)
+                print(f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} {Colors.GREEN}[✓] {initial_time_str} All Task Completeed 🗿", end="\r", flush=True)
+                await asyncio.sleep(1) 
+
+                seconds -= 1 # Decrement for the actual countdown
+
                 while seconds >= 0:
                     formatted_time = self.format_seconds(seconds)
-                    # Use carriage return \r to overwrite the line
                     print(
                         f"{Colors.BRIGHT_BLACK}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S')} ]{Colors.RESET} "
-                        f"{Colors.CYAN}[⟳] All Task Completeed Next cycle in: {formatted_time}          ", # Added spaces to clear previous text
+                        f"{Colors.CYAN}[⟳] All Task Completeed Next cycle in: {formatted_time}", # Added "All Task Completeed" here
                         end="\r",
                         flush=True
                     )
                     await asyncio.sleep(1)
                     seconds -= 1
-                # After the loop, print a newline to ensure the next output starts on a fresh line
-                print() 
 
         except FileNotFoundError:
             logger.error(f"File 'accounts.txt' Not Found.")
