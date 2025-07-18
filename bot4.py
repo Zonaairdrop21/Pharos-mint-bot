@@ -6,12 +6,18 @@ from eth_utils import keccak, to_hex
 from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
-from datetime import datetime
+from datetime import datetime, timedelta
 from colorama import *
-import asyncio, time, json, re, os, pytz
+import asyncio, time, json, re, os
 from dotenv import load_dotenv
 
-wib = pytz.timezone('Asia/Jakarta')
+# Get current time in WIB (UTC+7) without pytz
+def get_wib_time():
+    utc_time = datetime.utcnow()
+    wib_time = utc_time + timedelta(hours=7)
+    return wib_time
+
+now = get_wib_time()  # This will give you WIB time
 
 # === Terminal Color Setup ===
 class Colors:
