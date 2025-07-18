@@ -26,7 +26,7 @@ class Colors:
     BRIGHT_MAGENTA = Fore.LIGHTMAGENTA_EX
     BRIGHT_WHITE = Fore.LIGHTWHITE_EX
     BRIGHT_BLACK = Fore.LIGHTBLACK_EX
-    BLUE = Fore.BLUE # <--- Baris ini ditambahkan
+    BLUE = Fore.BLUE
 
 class Logger:
     @staticmethod
@@ -128,15 +128,15 @@ class Brokex:
                 "outputs": []
             },
             {
-                "name": "balanceOf", 
+                "name": "balanceOf",
                 "type": "function",
-                "stateMutability": "view", 
+                "stateMutability": "view",
                 "inputs": [
                     { "internalType": "address", "name": "account", "type": "address" }
-                ], 
+                ],
                 "outputs": [
                     { "internalType": "uint256", "name": "", "type": "uint256" }
-                ], 
+                ],
             },
             {
                 "name": "withdrawLiquidity",
@@ -176,13 +176,13 @@ class Brokex:
 
     def welcome(self):
         # This will be replaced by display_welcome_screen
-        pass 
+        pass
 
     def format_seconds(self, seconds):
         hours, remainder = divmod(seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-    
+
     async def load_proxies(self, use_proxy_choice: bool):
         filename = "proxy.txt"
         try:
@@ -192,7 +192,7 @@ class Brokex:
                     return
                 with open(filename, 'r') as f:
                     self.proxies = [line.strip() for line in f.read().splitlines() if line.strip()]
-            
+
             if not self.proxies and use_proxy_choice == 1: # Only for private proxy option
                 self.log(f"{Colors.RED + Colors.BOLD}No Proxies Found.{Colors.RESET}")
                 return
@@ -202,7 +202,7 @@ class Brokex:
                     f"{Colors.GREEN + Colors.BOLD}Proxies Total  : {Colors.RESET}"
                     f"{Colors.WHITE + Colors.BOLD}{len(self.proxies)}{Colors.RESET}"
                 )
-        
+
         except Exception as e:
             self.log(f"{Colors.RED + Colors.BOLD}Failed To Load Proxies: {e}{Colors.RESET}")
             self.proxies = []
@@ -229,7 +229,7 @@ class Brokex:
         self.account_proxies[token] = proxy
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
-    
+
     def build_proxy_config(self, proxy=None):
         if not proxy:
             return None, None, None
@@ -249,23 +249,23 @@ class Brokex:
                 return None, proxy, None
 
         raise Exception("Unsupported Proxy Type.")
-    
+
     def generate_address(self, account: str):
         try:
             account = Account.from_key(account)
             address = account.address
-            
+
             return address
         except Exception as e:
             return None
-        
+
     def mask_account(self, account):
         try:
             mask_account = account[:6] + '*' * 6 + account[-6:]
             return mask_account
         except Exception as e:
             return None
-        
+
     async def get_web3_with_check(self, address: str, use_proxy: bool, retries=3, timeout=60):
         request_kwargs = {"timeout": timeout}
 
@@ -284,7 +284,7 @@ class Brokex:
                     await asyncio.sleep(3)
                     continue
                 raise Exception(f"Failed to Connect to RPC: {str(e)}")
-        
+
     async def get_token_balance(self, address: str, contract_address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
@@ -303,7 +303,7 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None
-        
+
     async def get_lp_balance(self, address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
@@ -316,7 +316,7 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None
-        
+
     async def send_raw_transaction_with_retries(self, account, web3, tx, retries=5):
         for attempt in range(retries):
             try:
@@ -342,7 +342,7 @@ class Brokex:
                 pass
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Receipt Not Found After Maximum Retries")
-        
+
     async def check_faucet_status(self, address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
@@ -355,7 +355,7 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None
-        
+
     async def perform_claim_faucet(self, account: str, address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
@@ -388,15 +388,15 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None, None
-        
+
     async def approving_token(self, account: str, address: str, router_address: str, asset_address: str, amount: float, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
-            
+
             spender = web3.to_checksum_address(router_address)
             token_contract = web3.eth.contract(address=web3.to_checksum_address(asset_address), abi=self.ERC20_CONTRACT_ABI)
             decimals = token_contract.functions.decimals().call()
-            
+
             amount_to_wei = int(amount * (10 ** decimals))
 
             allowance = token_contract.functions.allowance(address, spender).call()
@@ -423,11 +423,11 @@ class Brokex:
                 self.used_nonce[address] += 1
 
                 explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
-                
+
                 logger.success(f"Approve: Success")
                 logger.info(f"Block: {block_number}")
-                logger.info(f"Tx Hash: {tx_hash}")
-                logger.info(f"Explorer: {explorer}")
+                logger.swap(f"Tx Hash: {tx_hash}") # Diubah
+                logger.swapSuccess(f"Explorer: {explorer}") # Diubah
                 await asyncio.sleep(5)
 
             return True
@@ -441,7 +441,7 @@ class Brokex:
             asset_address = web3.to_checksum_address(self.USDT_CONTRACT_ADDRESS)
             asset_contract = web3.eth.contract(address=web3.to_checksum_address(asset_address), abi=self.ERC20_CONTRACT_ABI)
             decimals = asset_contract.functions.decimals().call()
-            
+
             trade_amount = int(self.trade_amount * (10 ** decimals))
 
             await self.approving_token(account, address, self.TRADE_ROUTER_ADDRESS, asset_address, trade_amount, use_proxy)
@@ -477,7 +477,7 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None, None
-        
+
     async def perform_deposit_lp(self, account: str, address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
@@ -485,7 +485,7 @@ class Brokex:
             asset_address = web3.to_checksum_address(self.USDT_CONTRACT_ADDRESS)
             asset_contract = web3.eth.contract(address=web3.to_checksum_address(asset_address), abi=self.ERC20_CONTRACT_ABI)
             decimals = asset_contract.functions.decimals().call()
-            
+
             deposit_lp_amount = int(self.deposit_lp_amount * (10 ** decimals))
 
             await self.approving_token(account, address, self.POOL_ROUTER_ADDRESS, asset_address, deposit_lp_amount, use_proxy)
@@ -517,7 +517,7 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None, None
-        
+
     async def perform_withdraw_lp(self, account: str, address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
@@ -551,7 +551,7 @@ class Brokex:
         except Exception as e:
             logger.error(f"Message: {str(e)}")
             return None, None
-        
+
     async def print_timer(self):
         for remaining in range(random.randint(self.min_delay, self.max_delay), 0, -1):
             print(
@@ -596,8 +596,8 @@ class Brokex:
 
                 if option in [1, 2, 3]:
                     option_type = (
-                        "Deposit Liquidity" if option == 1 else 
-                        "Withdraw Liquidity" if option == 2 else 
+                        "Deposit Liquidity" if option == 1 else
+                        "Withdraw Liquidity" if option == 2 else
                         "Skipped"
                     )
                     logger.success(f"{option_type} Selected.")
@@ -614,7 +614,7 @@ class Brokex:
                     print(f"{Colors.RED + Colors.BOLD}Please enter either 1, 2, or 3.{Colors.RESET}")
             except ValueError:
                 print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1, 2, or 3).{Colors.RESET}")
-    
+
     def print_deposit_lp_question(self):
         while True:
             try:
@@ -683,7 +683,7 @@ class Brokex:
                     print(f"{Colors.RED + Colors.BOLD}Max Delay must be >= Min Delay.{Colors.RESET}")
             except ValueError:
                 print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number.{Colors.RESET}")
-        
+
     def print_question(self):
         while True:
             try:
@@ -697,10 +697,10 @@ class Brokex:
 
                 if option in [1, 2, 3, 4, 5]:
                     option_type = (
-                        "Claim Faucet" if option == 1 else 
-                        "Random Trade" if option == 2 else 
-                        "Deposit Liquidity" if option == 3 else 
-                        "Withdraw Liquidity" if option == 4 else 
+                        "Claim Faucet" if option == 1 else
+                        "Random Trade" if option == 2 else
+                        "Deposit Liquidity" if option == 3 else
+                        "Withdraw Liquidity" if option == 4 else
                         "Run All Features"
                     )
                     logger.success(f"{option_type} Selected.")
@@ -713,7 +713,7 @@ class Brokex:
         if option == 2:
             self.print_trade_question()
             self.print_delay_question()
-            
+
         elif option == 3:
             self.print_deposit_lp_question()
             self.print_delay_question()
@@ -721,7 +721,7 @@ class Brokex:
         elif option == 4:
             self.print_withdraw_lp_question()
             self.print_delay_question()
-            
+
         elif option == 5:
             self.print_trade_question()
             self.print_lp_option_question()
@@ -735,7 +735,7 @@ class Brokex:
 
                 if choose in [1, 2]:
                     proxy_type = (
-                        "With Private" if choose == 1 else 
+                        "With Private" if choose == 1 else
                         "Without"
                     )
                     logger.success(f"Run {proxy_type} Proxy Selected.")
@@ -757,7 +757,7 @@ class Brokex:
                     print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter 'y' or 'n'.{Colors.RESET}")
 
         return option, choose, rotate
-    
+
     async def check_connection(self, proxy_url=None):
         connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
         try:
@@ -768,7 +768,7 @@ class Brokex:
         except (Exception, ClientResponseError) as e:
             logger.error(f"Status: Connection Not 200 OK - {str(e)}")
             return None
-        
+
     async def get_proof(self, address: str, pair: int, use_proxy: bool, retries=5):
         url = f"{self.BASE_API}/proof?pairs={pair}"
         for attempt in range(retries):
@@ -784,7 +784,7 @@ class Brokex:
                     await asyncio.sleep(5)
                     continue
                 return None
-        
+
     async def process_check_connection(self, address: int, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
@@ -797,9 +797,9 @@ class Brokex:
                     continue
 
                 return False
-            
+
             return True
-    
+
     async def process_perform_claim_faucet(self, account: str, address: str, use_proxy: bool):
         has_claimed = await self.check_faucet_status(address, use_proxy)
         if not has_claimed:
@@ -809,8 +809,8 @@ class Brokex:
 
                 logger.swapSuccess(f"USDT Faucet Claimed Successfully")
                 logger.info(f"Block: {block_number}")
-                logger.info(f"Tx Hash: {tx_hash}")
-                logger.info(f"Explorer: {explorer}")
+                logger.swap(f"Tx Hash: {tx_hash}") # Diubah
+                logger.swapSuccess(f"Explorer: {explorer}") # Diubah
             else:
                 logger.error(f"Perform On-Chain Failed")
         else:
@@ -823,8 +823,8 @@ class Brokex:
 
             logger.swapSuccess(f"Trade Success")
             logger.info(f"Block: {block_number}")
-            logger.info(f"Tx Hash: {tx_hash}")
-            logger.info(f"Explorer: {explorer}")
+            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
+            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -835,8 +835,8 @@ class Brokex:
 
             logger.swapSuccess(f"Deposit Liquidity Success")
             logger.info(f"Block: {block_number}")
-            logger.info(f"Tx Hash: {tx_hash}")
-            logger.info(f"Explorer: {explorer}")
+            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
+            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -847,8 +847,8 @@ class Brokex:
 
             logger.swapSuccess(f"Withdraw Liquidity Success")
             logger.info(f"Block: {block_number}")
-            logger.info(f"Tx Hash: {tx_hash}")
-            logger.info(f"Explorer: {explorer}")
+            logger.swap(f"Tx Hash: {tx_hash}") # Diubah
+            logger.swapSuccess(f"Explorer: {explorer}") # Diubah
         else:
             logger.error(f"Perform On-Chain Failed")
 
@@ -876,7 +876,7 @@ class Brokex:
             if not balance or balance <= self.trade_amount:
                 logger.warn(f"Insufficient USDT Token Balance")
                 return
-            
+
             await self.process_perform_trade(account, address, pair, is_long, use_proxy)
             await self.print_timer()
 
@@ -892,7 +892,7 @@ class Brokex:
             if not balance or balance <= self.deposit_lp_amount:
                 logger.warn(f"Insufficient USDT Token Balance")
                 return
-            
+
             await self.process_perform_deposit_lp(account, address, use_proxy)
             await self.print_timer()
 
@@ -908,7 +908,7 @@ class Brokex:
             if not balance or balance <= self.withdraw_lp_amount:
                 logger.warn(f"Insufficient LP Tokens Held")
                 return
-            
+
             await self.process_perform_withdraw_lp(account, address, use_proxy)
             await self.print_timer()
 
@@ -919,12 +919,12 @@ class Brokex:
             if not web3:
                 logger.error(f"Status: Web3 Not Connected")
                 return
-            
+
             self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
-            
+
         if option == 1:
             logger.step(f"Option: Claim Faucet")
-            
+
             await self.process_option_1(account, address, use_proxy)
 
         elif option == 2:
@@ -944,7 +944,7 @@ class Brokex:
 
         else:
             logger.step(f"Option: Run All Features")
-            
+
             await self.process_option_1(account, address, use_proxy)
             await asyncio.sleep(5)
 
@@ -961,7 +961,7 @@ class Brokex:
         try:
             with open('accounts.txt', 'r') as file:
                 accounts = [line.strip() for line in file if line.strip()]
-            
+
             option, use_proxy_choice, rotate_proxy = self.print_question()
 
             while True:
@@ -974,7 +974,7 @@ class Brokex:
 
                 if use_proxy:
                     await self.load_proxies(use_proxy_choice)
-                
+
                 separator = "=" * 25
                 for account in accounts:
                     if account:
