@@ -975,12 +975,11 @@ class Brokex:
                 if use_proxy:
                     await self.load_proxies(use_proxy_choice)
 
-                separator = "=" * 25
                 for account in accounts:
                     if account:
                         address = self.generate_address(account)
 
-                        print(f"{Colors.CYAN + Colors.BOLD}{separator}[ {Colors.WHITE + Colors.BOLD}{self.mask_account(address)} {Colors.CYAN + Colors.BOLD}]{separator}{Colors.RESET}")
+                        print(f"{Colors.CYAN + Colors.BOLD}[ {Colors.WHITE + Colors.BOLD}{self.mask_account(address)} {Colors.CYAN + Colors.BOLD}]{Colors.RESET}")
 
 
                         if not address:
@@ -990,7 +989,6 @@ class Brokex:
                         await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
                         await asyncio.sleep(3)
 
-                logger.info("="*72)
                 seconds = 24 * 60 * 60
                 while seconds > 0:
                     formatted_time = self.format_seconds(seconds)
