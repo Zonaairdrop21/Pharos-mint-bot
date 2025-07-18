@@ -6,13 +6,12 @@ from eth_utils import keccak, to_hex
 from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
-from datetime import datetime, timezone
+from datetime import datetime
 from colorama import *
-import asyncio, uuid, json, os
-import time
-import random
+import asyncio, time, json, re, os, pytz
 from dotenv import load_dotenv
 
+wib = pytz.timezone('Asia/Jakarta')
 
 # === Terminal Color Setup ===
 class Colors:
@@ -664,16 +663,10 @@ class Gotchipus:
                     use_proxy = True
                     await self.load_proxies(1)
                 
-                separator = "=" * 25
                 for account in accounts:
                     if account:
                         address = self.generate_address(account)
-
-                        print(
-                            f"{Colors.CYAN + Colors.BOLD}{separator}[{Colors.RESET}"
-                            f"{Colors.WHITE + Colors.BOLD} {self.mask_account(address)} {Colors.RESET}"
-                            f"{Colors.CYAN + Colors.BOLD}]{separator}{Colors.RESET}"
-                        )
+                        logger.info(f"Processing account: {self.mask_account(address)}")
 
                         if not address:
                             logger.error("Invalid Private Key or Library Version Not Supported")
@@ -682,7 +675,6 @@ class Gotchipus:
                         await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
                         await asyncio.sleep(3)
 
-                print(f"{Colors.CYAN + Colors.BOLD}="*72)
                 seconds = 24 * 60 * 60
                 while seconds > 0:
                     formatted_time = self.format_seconds(seconds)
