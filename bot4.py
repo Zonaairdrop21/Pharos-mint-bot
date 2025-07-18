@@ -6,12 +6,13 @@ from eth_utils import keccak, to_hex
 from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
-from datetime import datetime
+from datetime import datetime, timezone
 from colorama import *
-import asyncio, time, json, re, os, pytz
+import asyncio, uuid, json, os
+import time
+import random
 from dotenv import load_dotenv
 
-wib = pytz.timezone('Asia/Jakarta')
 
 # === Terminal Color Setup ===
 class Colors:
