@@ -63,7 +63,7 @@ async def display_welcome_screen():
     print("  ╔══════════════════════════════════════╗")
     print("  ║            Gotchipus  B O T         ║")
     print("  ║                                     ║")
-    print(f"  ║     {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}                        ║")
+    print(f"  ║     {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}                    ║")
     print("  ║                                     ║")
     print("  ║     Pharos TESTNET AUTOMATION       ║")
     print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p   ║")
