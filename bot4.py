@@ -7,74 +7,13 @@ from aiohttp import ClientResponseError, ClientSession, ClientTimeout, BasicAuth
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
 from datetime import datetime
-from colorama import init, Fore, Style
+from colorama import *
 import asyncio, time, json, re, os, pytz
-from dotenv import load_dotenv
 
 wib = pytz.timezone('Asia/Jakarta')
 
-# === Terminal Color Setup ===
-class Colors:
-    RESET = Style.RESET_ALL
-    BOLD = Style.BRIGHT
-    GREEN = Fore.GREEN
-    YELLOW = Fore.YELLOW
-    RED = Fore.RED
-    CYAN = Fore.CYAN
-    MAGENTA = Fore.MAGENTA
-    WHITE = Fore.WHITE
-    BRIGHT_GREEN = Fore.LIGHTGREEN_EX
-    BRIGHT_MAGENTA = Fore.LIGHTMAGENTA_EX
-    BRIGHT_WHITE = Fore.LIGHTWHITE_EX
-    BRIGHT_BLACK = Fore.LIGHTBLACK_EX
-
-class Logger:
-    @staticmethod
-    def log(label, symbol, msg, color):
-        timestamp = datetime.now().astimezone(wib).strftime('%H:%M:%S')
-        print(f"{Colors.BRIGHT_BLACK}[{timestamp}]{Colors.RESET} {color}[{symbol}] {msg}{Colors.RESET}")
-
-    @staticmethod
-    def info(msg): Logger.log("INFO", "✓", msg, Colors.GREEN)
-    @staticmethod
-    def warn(msg): Logger.log("WARN", "!", msg, Colors.YELLOW)
-    @staticmethod
-    def error(msg): Logger.log("ERR", "✗", msg, Colors.RED)
-    @staticmethod
-    def success(msg): Logger.log("OK", "+", msg, Colors.GREEN)
-    @staticmethod
-    def loading(msg): Logger.log("LOAD", "⟳", msg, Colors.CYAN)
-    @staticmethod
-    def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
-    @staticmethod
-    def tx_sent(msg): Logger.log("TX", "↪️", msg, Colors.CYAN) # Custom for transaction sent
-    @staticmethod
-    def tx_success(msg): Logger.log("TX", "✅", msg, Colors.GREEN) # Custom for transaction success
-
-logger = Logger()
-
-def clear_console():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-async def display_welcome_screen():
-    clear_console()
-    now = datetime.now().astimezone(wib)
-    print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
-    print("  ╔══════════════════════════════════════╗")
-    print("  ║         D Z A P   B O T            ║")
-    print("  ║                                      ║")
-    print(f"  ║      {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}          ║")
-    print("  ║                                      ║")
-    print("  ║      MONAD TESTNET AUTOMATION        ║")
-    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p   ║")
-    print("  ╚══════════════════════════════════════╝")
-    print(f"{Colors.RESET}")
-    await asyncio.sleep(1)
-
 class Gotchipus:
     def __init__(self) -> None:
-        init(autoreset=True)
-        load_dotenv()
         self.HEADERS = {
             "Accept": "*/*",
             "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -115,33 +54,57 @@ class Gotchipus:
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
 
+    def log(self, message):
+        print(
+            f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
+            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}{message}",
+            flush=True
+        )
+
     def welcome(self):
-        asyncio.run(display_welcome_screen())
+        print(
+            f"""
+        {Fore.GREEN + Style.BRIGHT}Gotchipus{Fore.BLUE + Style.BRIGHT}Auto BOT
+            """
+            f"""
+        {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
+            """
+        )
 
     def format_seconds(self, seconds):
         hours, remainder = divmod(seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
     
-    async def load_proxies(self, proxy_mode: int):
+    async def load_proxies(self, use_proxy_choice: bool):
         filename = "proxy.txt"
         try:
-            if proxy_mode == 1:
+            if use_proxy_choice == 1:
+                async with ClientSession(timeout=ClientTimeout(total=30)) as session:
+                    async with session.get("https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/http.txt") as response:
+                        response.raise_for_status()
+                        content = await response.text()
+                        with open(filename, 'w') as f:
+                            f.write(content)
+                        self.proxies = [line.strip() for line in content.splitlines() if line.strip()]
+            else:
                 if not os.path.exists(filename):
-                    logger.error(f"File {filename} Not Found.")
+                    self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
                     return
                 with open(filename, 'r') as f:
                     self.proxies = [line.strip() for line in f.read().splitlines() if line.strip()]
             
-            if not self.proxies and proxy_mode == 1:
-                logger.error("No Proxies Found.")
+            if not self.proxies:
+                self.log(f"{Fore.RED + Style.BRIGHT}No Proxies Found.{Style.RESET_ALL}")
                 return
 
-            if proxy_mode == 1:
-                logger.info(f"Proxies Total: {len(self.proxies)}")
-            
+            self.log(
+                f"{Fore.GREEN + Style.BRIGHT}Proxies Total  : {Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT}{len(self.proxies)}{Style.RESET_ALL}"
+            )
+        
         except Exception as e:
-            logger.error(f"Failed To Load Proxies: {e}")
+            self.log(f"{Fore.RED + Style.BRIGHT}Failed To Load Proxies: {e}{Style.RESET_ALL}")
             self.proxies = []
 
     def check_proxy_schemes(self, proxies):
@@ -201,7 +164,7 @@ class Gotchipus:
             mask_account = account[:6] + '*' * 6 + account[-6:]
             return mask_account
         except Exception as e:
-            return mask_account
+            return None
         
     def build_struct_data(self, account: str, address: str):
         try:
@@ -246,7 +209,6 @@ class Gotchipus:
         proxy = self.get_next_proxy_for_account(address) if use_proxy else None
 
         if use_proxy and proxy:
-            # Web3.py's HTTPProvider uses 'requests' internally, which takes a 'proxies' dictionary
             request_kwargs["proxies"] = {"http": proxy, "https": proxy}
 
         for attempt in range(retries):
@@ -258,19 +220,20 @@ class Gotchipus:
                 if attempt < retries - 1:
                     await asyncio.sleep(3)
                     continue
-                logger.error(f"Failed to Connect to RPC: {e}")
-                return None
+                raise Exception(f"Failed to Connect to RPC: {str(e)}")
         
     async def get_token_balance(self, address: str, use_proxy: bool):
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3: return None
             balance = web3.eth.get_balance(address)
             token_balance = balance / (10 ** 18)
 
             return token_balance
         except Exception as e:
-            logger.error(f"Message: {e}")
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
             return None
         
     async def send_raw_transaction_with_retries(self, account, web3, tx, retries=5):
@@ -301,9 +264,7 @@ class Gotchipus:
 
     async def perform_mint_nft(self, account: str, address: str, use_proxy: bool):
         try:
-            logger.tx_sent("Attempting to Mint NFT...")
             web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3: return None, None
 
             contract_address = web3.to_checksum_address(self.GOTCHIPUS_CONTRACT_ADDRESS)
             token_contract = web3.eth.contract(address=contract_address, abi=self.MINT_CONTRACT_ABI)
@@ -328,17 +289,18 @@ class Gotchipus:
 
             block_number = receipt.blockNumber
             self.used_nonce[address] += 1
-            logger.tx_success("NFT Mint Transaction Sent!")
+
             return tx_hash, block_number
         except Exception as e:
-            logger.error(f"Message: {e}")
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
             return None, None
         
     async def perform_claim_wearable(self, account: str, address: str, use_proxy: bool):
         try:
-            logger.tx_sent("Attempting to Claim Wearable...")
             web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3: return None, None
 
             contract_address = web3.to_checksum_address(self.GOTCHIPUS_CONTRACT_ADDRESS)
             token_contract = web3.eth.contract(address=contract_address, abi=self.MINT_CONTRACT_ABI)
@@ -363,21 +325,24 @@ class Gotchipus:
 
             block_number = receipt.blockNumber
             self.used_nonce[address] += 1
-            logger.tx_success("Wearable Claim Transaction Sent!")
+
             return tx_hash, block_number
         except Exception as e:
-            logger.error(f"Message: {e}")
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Message :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
             return None, None
         
     def print_question(self):
         while True:
             try:
-                print(f"{Colors.GREEN + Colors.BOLD}Select Option:{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}1. Claim Daily Check-In{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}2. Mint Gotchipus NFT{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}3. Claim Wearable{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}4. Run All Features{Colors.RESET}")
-                option = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3/4] -> {Colors.RESET}").strip())
+                print(f"{Fore.GREEN + Style.BRIGHT}Select Option:{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}1. Claim Daily Check-In{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}2. Mint Gotchipus NFT{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}3. Claim Wearable{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}4. Run All Features{Style.RESET_ALL}")
+                option = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3/4] -> {Style.RESET_ALL}").strip())
 
                 if option in [1, 2, 3, 4]:
                     option_type = (
@@ -386,41 +351,43 @@ class Gotchipus:
                         "Claim Wearable" if option == 3 else 
                         "Run All Features"
                     )
-                    print(f"{Colors.GREEN + Colors.BOLD}{option_type} Selected.{Colors.RESET}")
+                    print(f"{Fore.GREEN + Style.BRIGHT}{option_type} Selected.{Style.RESET_ALL}")
                     break
                 else:
-                    print(f"{Colors.RED + Colors.BOLD}Please enter either 1, 2, 3, or 4.{Colors.RESET}")
+                    print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2, 3, or 4.{Style.RESET_ALL}")
             except ValueError:
-                print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1, 2, 3, or 4).{Colors.RESET}")
+                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2, 3, or 4).{Style.RESET_ALL}")
 
         while True:
             try:
-                print(f"{Colors.WHITE + Colors.BOLD}1. Run With Private Proxy{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}2. Run Without Proxy{Colors.RESET}")
-                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2] -> {Colors.RESET}").strip())
+                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Free Proxyscrape Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}3. Run Without Proxy{Style.RESET_ALL}")
+                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Style.RESET_ALL}").strip())
 
-                if choose in [1, 2]:
+                if choose in [1, 2, 3]:
                     proxy_type = (
-                        "With Private" if choose == 1 else 
+                        "With Free Proxyscrape" if choose == 1 else 
+                        "With Private" if choose == 2 else 
                         "Without"
                     )
-                    print(f"{Colors.GREEN + Colors.BOLD}Run {proxy_type} Proxy Selected.{Colors.RESET}")
+                    print(f"{Fore.GREEN + Style.BRIGHT}Run {proxy_type} Proxy Selected.{Style.RESET_ALL}")
                     break
                 else:
-                    print(f"{Colors.RED + Colors.BOLD}Please enter either 1 or 2.{Colors.RESET}")
+                    print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2 or 3.{Style.RESET_ALL}")
             except ValueError:
-                print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1 or 2).{Colors.RESET}")
+                print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2 or 3).{Style.RESET_ALL}")
 
         rotate = False
-        if choose == 1:
+        if choose in [1, 2]:
             while True:
-                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Colors.RESET}").strip()
+                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
 
                 if rotate in ["y", "n"]:
                     rotate = rotate == "y"
                     break
                 else:
-                    print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter 'y' or 'n'.{Colors.RESET}")
+                    print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
 
         return option, choose, rotate
     
@@ -432,8 +399,13 @@ class Gotchipus:
                     response.raise_for_status()
                     return True
         except (Exception, ClientResponseError) as e:
-            logger.warn(f"Connection Not 200 OK - {e}")
-            return False # Return False on failure
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
+                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
+            return None
         
     async def task_info(self, address: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/tasks/info"
@@ -451,10 +423,15 @@ class Gotchipus:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
-                if attempt < retries - 1: # Only retry if not the last attempt
+                if attempt < retries:
                     await asyncio.sleep(5)
                     continue
-                logger.warn(f"Fetch Last Check-In Failed - {e}")
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Fetch Last Check-In Failed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
                 return None
             
     async def verify_tasks(self, account: str, address: str, proxy_url=None, retries=5):
@@ -473,10 +450,15 @@ class Gotchipus:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
-                if attempt < retries - 1: # Only retry if not the last attempt
+                if attempt < retries:
                     await asyncio.sleep(5)
                     continue
-                logger.error(f"Verify Failed - {e}")
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Verify  :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Failed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
                 return None
             
     async def claim_checkin(self, address: str, proxy_url=None, retries=5):
@@ -495,14 +477,76 @@ class Gotchipus:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
-                if attempt < retries - 1: # Only retry if not the last attempt
+                if attempt < retries:
                     await asyncio.sleep(5)
                     continue
-                logger.warn(f"Not Claimed - {e}")
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Not Claimed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
                 return None
     
-    async def process_option_1(self, account: str, address: str, use_proxy: bool):
-        logger.step("Checking-In...")
+    async def process_perform_mint_nft(self, account: str, address: str, use_proxy: bool):
+        tx_hash, block_number = await self.perform_mint_nft(account, address, use_proxy)
+        if tx_hash and block_number:
+            explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
+
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Block   :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Tx Hash :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Explorer:{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+            )
+        else:
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
+            )
+
+    async def process_perform_claim_wearable(self, account: str, address: str, use_proxy: bool):
+        tx_hash, block_number = await self.perform_claim_wearable(account, address, use_proxy)
+        if tx_hash and block_number:
+            explorer = f"https://testnet.pharosscan.xyz/tx/{tx_hash}"
+
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Block   :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {block_number} {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Tx Hash :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {tx_hash} {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Explorer:{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {explorer} {Style.RESET_ALL}"
+            )
+        else:
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Perform On-Chain Failed {Style.RESET_ALL}"
+            )
+
+    async def process_option_1(self, account: str, address: str, use_proxy):
+        self.log(
+            f"{Fore.MAGENTA+Style.BRIGHT} ● {Style.RESET_ALL}"
+            f"{Fore.GREEN+Style.BRIGHT}Check-In{Style.RESET_ALL}"
+        )
 
         proxy = self.get_next_proxy_for_account(address) if use_proxy else None
         
@@ -512,177 +556,264 @@ class Gotchipus:
             level = tasks.get("data", {}).get("level", 0)
             last_checkin = tasks.get("data", {}).get("latest_check_in_at", None)
 
-            logger.info(f"Points: {xp_point} XP")
-            logger.info(f"Level: {level}")
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Points  :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {xp_point} XP {Style.RESET_ALL}"
+            )
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Level   :{Style.RESET_ALL}"
+                f"{Fore.WHITE+Style.BRIGHT} {level} {Style.RESET_ALL}"
+            )
 
             if last_checkin is None:
                 verified = await self.verify_tasks(account, address, proxy)
                 if verified and verified.get("code") == 0:
-                    logger.success("Verify Success")
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}   Verify  :{Style.RESET_ALL}"
+                        f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                    )
 
                     claim = await self.claim_checkin(address, proxy)
                     if claim and claim.get("code") == 0:
-                        logger.success("Claimed Successfully")
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                            f"{Fore.GREEN+Style.BRIGHT} Claimed Successfully {Style.RESET_ALL}"
+                        )
                     elif claim and claim.get("code") == 1:
                         err_msg = claim.get("message", "Unknown Error")
-                        logger.warn(f"Not Claimed - {err_msg}")
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                            f"{Fore.RED+Style.BRIGHT} Not Claimed {Style.RESET_ALL}"
+                            f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT} {err_msg} {Style.RESET_ALL}"
+                        )
 
                 elif verified and verified.get("code") == 1:
                     err_msg = verified.get("message", "Unknown Error")
-                    logger.error(f"Verify Failed - {err_msg}")
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}   Verify  :{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Failed {Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT} {err_msg} {Style.RESET_ALL}"
+                    )
             
             else:
                 next_checkin = last_checkin + 86400
                 if int(time.time()) < next_checkin:
                     formatted_time = datetime.fromtimestamp(next_checkin).astimezone(wib).strftime('%x %X %Z')
-                    logger.warn(f"Not Time to Claim - Next Claim at {formatted_time}")
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT} Not Time to Claim {Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                        f"{Fore.CYAN+Style.BRIGHT} Next Claim at {Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT}{formatted_time}{Style.RESET_ALL}"
+                    )
                     return
                 
                 verified = await self.verify_tasks(account, address, proxy)
                 if verified and verified.get("code") == 0:
-                    logger.success("Verify Success")
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}   Verify  :{Style.RESET_ALL}"
+                        f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                    )
 
                     claim = await self.claim_checkin(address, proxy)
                     if claim and claim.get("code") == 0:
-                        logger.success("Claimed Successfully")
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                            f"{Fore.GREEN+Style.BRIGHT} Claimed Successfully {Style.RESET_ALL}"
+                        )
                     elif claim and claim.get("code") == 1:
                         err_msg = claim.get("message", "Unknown Error")
-                        logger.warn(f"Not Claimed - {err_msg}")
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                            f"{Fore.RED+Style.BRIGHT} Not Claimed {Style.RESET_ALL}"
+                            f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT} {err_msg} {Style.RESET_ALL}"
+                        )
 
                 elif verified and verified.get("code") == 1:
                     err_msg = verified.get("message", "Unknown Error")
-                    logger.error(f"Verify Failed - {err_msg}")
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}   Verify  :{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Failed {Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT} {err_msg} {Style.RESET_ALL}"
+                    )
 
         elif tasks and tasks.get("code") == 1:
             err_msg = tasks.get("message", "Unknown Error")
-            logger.error(f"Fetch Last Check-In Failed - {err_msg}")
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Fetch Last Check-In Failed {Style.RESET_ALL}"
+                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} {err_msg} {Style.RESET_ALL}"
+            )
 
-    async def process_option_2(self, account: str, address: str, use_proxy: bool):
-        logger.step("Minting NFT...")
+    async def process_option_2(self, account: str, address: str, use_proxy):
+        self.log(
+            f"{Fore.MAGENTA+Style.BRIGHT} ● {Style.RESET_ALL}"
+            f"{Fore.GREEN+Style.BRIGHT}NFT{Style.RESET_ALL}"
+        )
         balance = await self.get_token_balance(address, use_proxy)
         fees = 0.000355
 
-        logger.info(f"Balance: {balance} PHRS")
-        logger.info(f"Mint Fee: {fees} PHRS")
+        self.log(
+            f"{Fore.CYAN+Style.BRIGHT}   Balance :{Style.RESET_ALL}"
+            f"{Fore.WHITE+Style.BRIGHT} {balance} PHRS {Style.RESET_ALL}"
+        )
+        self.log(
+            f"{Fore.CYAN+Style.BRIGHT}   Mint Fee:{Style.RESET_ALL}"
+            f"{Fore.WHITE+Style.BRIGHT} {fees} PHRS {Style.RESET_ALL}"
+        )
 
-        if not balance or balance <= fees:
-            logger.warn("Insufficient PHRS Token Balance")
+        if not balance or balance <=  fees:
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} Insufficient PHRS Token Balance {Style.RESET_ALL}"
+            )
             return
         
-        await self.perform_mint_nft(account, address, use_proxy)
+        await self.process_perform_mint_nft(account, address, use_proxy)
 
-    async def process_option_3(self, account: str, address: str, use_proxy: bool):
-        logger.step("Claiming Wearable...")
+    async def process_option_3(self, account: str, address: str, use_proxy):
+        self.log(
+            f"{Fore.MAGENTA+Style.BRIGHT} ● {Style.RESET_ALL}"
+            f"{Fore.GREEN+Style.BRIGHT}Wearable{Style.RESET_ALL}"
+        )
         balance = await self.get_token_balance(address, use_proxy)
         fees = 0.0007
-        logger.info(f"Balance: {balance} PHRS")
-        logger.info(f"Mint Fee: {fees} PHRS")
+        self.log(
+            f"{Fore.CYAN+Style.BRIGHT}   Balance :{Style.RESET_ALL}"
+            f"{Fore.WHITE+Style.BRIGHT} {balance} PHRS {Style.RESET_ALL}"
+        )
+        self.log(
+            f"{Fore.CYAN+Style.BRIGHT}   Mint Fee:{Style.RESET_ALL}"
+            f"{Fore.WHITE+Style.BRIGHT} {fees} PHRS {Style.RESET_ALL}"
+        )
 
-        if not balance or balance <= fees:
-            logger.warn("Insufficient PHRS Token Balance")
+        if not balance or balance <=  fees:
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}   Status  :{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} Insufficient PHRS Token Balance {Style.RESET_ALL}"
+            )
             return
         
-        # PERBAIKAN: Mengubah panggilan ke perform_claim_wearable
-        await self.perform_claim_wearable(account, address, use_proxy)
+        await self.process_perform_claim_wearable(account, address, use_proxy)
 
     async def process_check_connection(self, address: int, use_proxy: bool, rotate_proxy: bool):
-        if not use_proxy:
-            return True # If no proxy is selected, consider connection as always valid
-
         while True:
-            proxy = self.get_next_proxy_for_account(address)
-            if not proxy: # No proxies loaded even if use_proxy is True
-                logger.error("No proxies available to check connection.")
-                return False
-
-            logger.info(f"Proxy: {proxy}")
+            proxy = self.get_next_proxy_for_account(address) if use_proxy else None
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Proxy   :{Style.RESET_ALL}"
+                f"{Fore.WHITE + Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+            )
 
             is_valid = await self.check_connection(proxy)
             if not is_valid:
                 if rotate_proxy:
-                    logger.warn("Proxy connection failed. Rotating proxy...")
-                    self.rotate_proxy_for_account(address) # Rotate the proxy
-                    continue # Try again with the new proxy
-                else:
-                    logger.error("Failed to establish proxy connection and rotation is off.")
-                    return False
-            return True # Valid connection found, exit loop and return True
-
-    async def process_accounts(self, account: str, address: str, option: int, use_proxy: bool, rotate_proxy: bool):
-        if use_proxy:
-            is_valid_proxy_connection = await self.process_check_connection(address, use_proxy, rotate_proxy)
-            if not is_valid_proxy_connection:
-                logger.error("Skipping account due to proxy connection failure.")
-                return
-
-        web3 = await self.get_web3_with_check(address, use_proxy)
-        if not web3:
-            logger.error("Web3 Not Connected. Skipping account.")
-            return
-        
-        self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
-        
-        if option == 1:
-            logger.info("Option: Claim Daily Check-In")
-            await self.process_option_1(account, address, use_proxy)
-        elif option == 2:
-            logger.info("Option: Mint Gotchipus NFT")
-            await self.process_option_2(account, address, use_proxy)
-        elif option == 3:
-            logger.info("Option: Claim Wearable")
-            await self.process_option_3(account, address, use_proxy)
-        else: # option == 4 (Run All Features)
-            logger.info("Option: Run All Features")
-            
-            await self.process_option_1(account, address, use_proxy)
-            await asyncio.sleep(5)
-
-            await self.process_option_2(account, address, use_proxy)
-            await asyncio.sleep(5)
-
-            await self.process_option_3(account, address, use_proxy)
-
-    async def main(self):
-        while True:
-            try:
-                with open('accounts.txt', 'r') as file:
-                    accounts = [line.strip() for line in file if line.strip()]
-                
-                if not accounts:
-                    logger.error("No accounts found in 'accounts.txt'. Please add private keys.")
-                    await asyncio.sleep(10)
+                    proxy = self.rotate_proxy_for_account(address)
                     continue
 
-                option, choose, rotate_proxy = self.print_question()
+                return False
+            
+            return True
+
+    async def process_accounts(self, account: str, address: str, option: int, use_proxy: bool, rotate_proxy: bool):
+        is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
+        if is_valid:
+            web3 = await self.get_web3_with_check(address, use_proxy)
+            if not web3:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Web3 Not Connected {Style.RESET_ALL}"
+                )
+                return
+            
+            self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
+            
+            if option == 1:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Claim Daily Check-In {Style.RESET_ALL}"
+                )
+                
+                await self.process_option_1(account, address, use_proxy)
+
+            elif option == 2:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Mint Gotchipus NFT {Style.RESET_ALL}"
+                )
+                
+                await self.process_option_2(account, address, use_proxy)
+
+            elif option == 3:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Claim Wearable {Style.RESET_ALL}"
+                )
+                
+                await self.process_option_3(account, address, use_proxy)
+
+            else:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Run All Features {Style.RESET_ALL}"
+                )
+                
+                await self.process_option_1(account, address, use_proxy)
+                await asyncio.sleep(5)
+
+                await self.process_option_2(account, address, use_proxy)
+                await asyncio.sleep(5)
+
+                await self.process_option_3(account, address, use_proxy)
+
+    async def main(self):
+        try:
+            with open('accounts.txt', 'r') as file:
+                accounts = [line.strip() for line in file if line.strip()]
+            
+            option, use_proxy_choice, rotate_proxy = self.print_question()
+
+            while True:
+                use_proxy = False
+                if use_proxy_choice in [1, 2]:
+                    use_proxy = True
 
                 self.clear_terminal()
-                await display_welcome_screen()
+                self.welcome()
+                self.log(
+                    f"{Fore.GREEN + Style.BRIGHT}Account's Total: {Style.RESET_ALL}"
+                    f"{Fore.WHITE + Style.BRIGHT}{len(accounts)}{Style.RESET_ALL}"
+                )
 
-                logger.info(f"Account's Total: {len(accounts)}")
-
-                use_proxy = (choose == 1) # True if user selected "Run With Private Proxy"
                 if use_proxy:
-                    await self.load_proxies(1) # Pass 1 to indicate loading private proxies from file.
-                    if not self.proxies:
-                        logger.error("No proxies loaded. Running without proxies.")
-                        use_proxy = False # Override use_proxy if no proxies found
-
+                    await self.load_proxies(use_proxy_choice)
+                
                 separator = "=" * 25
                 for account in accounts:
                     if account:
                         address = self.generate_address(account)
-                        
-                        print(
-                            f"{Colors.CYAN + Colors.BOLD}{separator}[{Colors.RESET}"
-                            f"{Colors.WHITE + Colors.BOLD} {self.mask_account(address)} {Colors.RESET}"
-                            f"{Colors.CYAN + Colors.BOLD}]{separator}"
-                        )
-                        await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
-                        print(f"{Colors.CYAN + Colors.BOLD}={Style.RESET_ALL}"*72)
-                        await asyncio.sleep(5) # Delay between accounts
 
-                # After all accounts are processed, wait for 24 hours before restarting the loop
-                logger.info(f"{Colors.BRIGHT_GREEN + Colors.BOLD}={Style.RESET_ALL}"*72)
+                        self.log(
+                            f"{Fore.CYAN + Style.BRIGHT}{separator}[{Style.RESET_ALL}"
+                            f"{Fore.WHITE + Style.BRIGHT} {self.mask_account(address)} {Style.RESET_ALL}"
+                            f"{Fore.CYAN + Style.BRIGHT}]{separator}{Style.RESET_ALL}"
+                        )
+
+                        if not address:
+                            self.log(
+                                f"{Fore.CYAN + Style.BRIGHT}Status  :{Style.RESET_ALL}"
+                                f"{Fore.RED + Style.BRIGHT} Invalid Private Key or Library Version Not Supported {Style.RESET_ALL}"
+                            )
+                            continue
+
+                        await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
+                        await asyncio.sleep(3)
+
+                self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*72)
                 seconds = 24 * 60 * 60
                 while seconds > 0:
                     formatted_time = self.format_seconds(seconds)
@@ -696,23 +827,21 @@ class Gotchipus:
                     )
                     await asyncio.sleep(1)
                     seconds -= 1
-                print("\n") # Clear the line after the countdown
 
-            except FileNotFoundError:
-                logger.error("File 'accounts.txt' Not Found. Please create it.")
-                await asyncio.sleep(10) # Wait before re-checking
-            except Exception as e:
-                logger.error(f"Main Error: {e}")
-                # Consider adding a longer sleep or exit strategy for critical errors
-                await asyncio.sleep(10) # Wait before restarting loop
-                
+        except FileNotFoundError:
+            self.log(f"{Fore.RED}File 'accounts.txt' Not Found.{Style.RESET_ALL}")
+            return
+        except Exception as e:
+            self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
+            raise e
+
 if __name__ == "__main__":
     try:
         bot = Gotchipus()
         asyncio.run(bot.main())
     except KeyboardInterrupt:
         print(
-            f"\n{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BOLD} | {Style.RESET_ALL}"
-            f"{Fore.MAGENTA + Style.BRIGHT}Exiting Bot.{Style.RESET_ALL}"
+            f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
+            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
+            f"{Fore.RED + Style.BRIGHT}[ EXIT ] Gotchipus - BOT{Style.RESET_ALL}                                       "                              
         )
