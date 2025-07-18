@@ -47,9 +47,9 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def swap(msg): Logger.log("SWAP", "↪️", msg, Colors.CYAN)
+    def tx_sent(msg): Logger.log("TX", "↪️", msg, Colors.CYAN) # Custom for transaction sent
     @staticmethod
-    def swapSuccess(msg): Logger.log("SWAP", "✅", msg, Colors.GREEN)
+    def tx_success(msg): Logger.log("TX", "✅", msg, Colors.GREEN) # Custom for transaction success
 
 logger = Logger()
 
@@ -310,7 +310,7 @@ class Gotchipus:
 
     async def perform_mint_nft(self, account: str, address: str, use_proxy: bool):
         try:
-            logger.swap("Attempting to Mint NFT...")
+            logger.tx_sent("Attempting to Mint NFT...")
             web3 = await self.get_web3_with_check(address, use_proxy)
             if not web3: return None, None
 
@@ -337,7 +337,7 @@ class Gotchipus:
 
             block_number = receipt.blockNumber
             self.used_nonce[address] += 1
-            logger.swapSuccess("NFT Mint Transaction Sent!")
+            logger.tx_success("NFT Mint Transaction Sent!")
             return tx_hash, block_number
         except Exception as e:
             logger.error(f"Message: {e}")
@@ -345,7 +345,7 @@ class Gotchipus:
         
     async def perform_claim_wearable(self, account: str, address: str, use_proxy: bool):
         try:
-            logger.swap("Attempting to Claim Wearable...")
+            logger.tx_sent("Attempting to Claim Wearable...")
             web3 = await self.get_web3_with_check(address, use_proxy)
             if not web3: return None, None
 
@@ -372,7 +372,7 @@ class Gotchipus:
 
             block_number = receipt.blockNumber
             self.used_nonce[address] += 1
-            logger.swapSuccess("Wearable Claim Transaction Sent!")
+            logger.tx_success("Wearable Claim Transaction Sent!")
             return tx_hash, block_number
         except Exception as e:
             logger.error(f"Message: {e}")
@@ -711,7 +711,7 @@ if __name__ == "__main__":
         asyncio.run(bot.main())
     except KeyboardInterrupt:
         print(
-            f"{Colors.CYAN + Colors.BOLD}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Colors.RESET}"
+            f"{Colors.CYAN + Colors.BOLD}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S %d.%m.%Y')} ]{Colors.RESET}" # Changed to H:M:S D.M.Y
             f"{Colors.WHITE + Colors.BOLD} | {Colors.RESET}"
             f"{Colors.RED + Colors.BOLD}[ EXIT ] Gotchipus - BOT{Colors.RESET}                                       "                              
         )
