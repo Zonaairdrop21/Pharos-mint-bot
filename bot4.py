@@ -11,6 +11,7 @@ from colorama import *
 import asyncio, time, json, re, os, pytz
 from dotenv import load_dotenv
 
+wib = pytz.timezone('Asia/Jakarta')
 
 # === Terminal Color Setup ===
 class Colors:
