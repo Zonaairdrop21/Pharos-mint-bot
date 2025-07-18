@@ -1015,4 +1015,8 @@ if __name__ == "__main__":
         bot = Brokex()
         asyncio.run(bot.main())
     except KeyboardInterrupt:
-        logger.error("[ EXIT ] Brokex Protocol - BOT")
+        print(
+            f"{Colors.CYAN + Colors.BOLD}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S %d.%m.%Y')} ]{Colors.RESET}"
+            f"{Colors.WHITE + Colors.BOLD} | {Colors.RESET}"
+            f"{Colors.RED + Colors.BOLD}[ EXIT ] Gotchipus - BOT{Colors.RESET}                                       "                              
+        )
