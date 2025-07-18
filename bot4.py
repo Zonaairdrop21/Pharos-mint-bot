@@ -11,7 +11,6 @@ from colorama import *
 import asyncio, time, json, re, os, pytz
 from dotenv import load_dotenv
 
-wib = pytz.timezone('Asia/Jakarta')
 
 # === Terminal Color Setup ===
 class Colors:
@@ -47,9 +46,9 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def swap(msg): Logger.log("SWAP", "↪️", msg, Colors.CYAN)
+    def tx_sent(msg): Logger.log("TX", "↪️", msg, Colors.CYAN) # Custom for transaction sent
     @staticmethod
-    def swapSuccess(msg): Logger.log("SWAP", "✅", msg, Colors.GREEN)
+    def tx_success(msg): Logger.log("TX", "✅", msg, Colors.GREEN) # Custom for transaction success
 
 logger = Logger()
 
@@ -211,7 +210,7 @@ class Gotchipus:
             mask_account = account[:6] + '*' * 6 + account[-6:]
             return mask_account
         except Exception as e:
-            return None
+            return mask_account
         
     def build_struct_data(self, account: str, address: str):
         try:
@@ -310,7 +309,7 @@ class Gotchipus:
 
     async def perform_mint_nft(self, account: str, address: str, use_proxy: bool):
         try:
-            logger.swap("Attempting to Mint NFT...")
+            logger.tx_sent("Attempting to Mint NFT...")
             web3 = await self.get_web3_with_check(address, use_proxy)
             if not web3: return None, None
 
@@ -337,7 +336,7 @@ class Gotchipus:
 
             block_number = receipt.blockNumber
             self.used_nonce[address] += 1
-            logger.swapSuccess("NFT Mint Transaction Sent!")
+            logger.tx_success("NFT Mint Transaction Sent!")
             return tx_hash, block_number
         except Exception as e:
             logger.error(f"Message: {e}")
@@ -345,7 +344,7 @@ class Gotchipus:
         
     async def perform_claim_wearable(self, account: str, address: str, use_proxy: bool):
         try:
-            logger.swap("Attempting to Claim Wearable...")
+            logger.tx_sent("Attempting to Claim Wearable...")
             web3 = await self.get_web3_with_check(address, use_proxy)
             if not web3: return None, None
 
@@ -372,7 +371,7 @@ class Gotchipus:
 
             block_number = receipt.blockNumber
             self.used_nonce[address] += 1
-            logger.swapSuccess("Wearable Claim Transaction Sent!")
+            logger.tx_success("Wearable Claim Transaction Sent!")
             return tx_hash, block_number
         except Exception as e:
             logger.error(f"Message: {e}")
@@ -382,40 +381,50 @@ class Gotchipus:
         while True:
             try:
                 print(f"{Colors.GREEN + Colors.BOLD}Select Option:{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}1. Run All Features{Colors.RESET}")
-                option = int(input(f"{Colors.BLUE + Colors.BOLD}Choose [1] -> {Colors.RESET}").strip())
+                print(f"{Colors.WHITE + Colors.BOLD}1. Claim Daily Check-In{Colors.RESET}")
+                print(f"{Colors.WHITE + Colors.BOLD}2. Mint Gotchipus NFT{Colors.RESET}")
+                print(f"{Colors.WHITE + Colors.BOLD}3. Claim Wearable{Colors.RESET}")
+                print(f"{Colors.WHITE + Colors.BOLD}4. Run All Features{Colors.RESET}")
+                option = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3/4] -> {Colors.RESET}").strip()) # Corrected
 
-                if option == 1:
-                    option_type = "Run All Features"
+                if option in [1, 2, 3, 4]:
+                    option_type = (
+                        "Claim Daily Check-In" if option == 1 else 
+                        "Mint Gotchipus NFT" if option == 2 else 
+                        "Claim Wearable" if option == 3 else 
+                        "Run All Features"
+                    )
                     print(f"{Colors.GREEN + Colors.BOLD}{option_type} Selected.{Colors.RESET}")
                     break
                 else:
-                    print(f"{Colors.RED + Colors.BOLD}Please enter 1.{Colors.RESET}")
+                    print(f"{Colors.RED + Colors.BOLD}Please enter either 1, 2, 3, or 4.{Colors.RESET}")
             except ValueError:
-                print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1).{Colors.RESET}")
+                print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1, 2, 3, or 4).{Colors.RESET}")
 
         while True:
             try:
-                print(f"{Colors.WHITE + Colors.BOLD}1. Run With Private Proxy{Colors.RESET}")
-                print(f"{Colors.WHITE + Colors.BOLD}2. Run Without Proxy{Colors.RESET}")
-                choose = int(input(f"{Colors.BLUE + Colors.BOLD}Choose [1/2] -> {Colors.RESET}").strip())
+                print(f"{Colors.WHITE + Colors.BOLD}1. Run With Free Proxyscrape Proxy{Colors.RESET}")
+                print(f"{Colors.WHITE + Colors.BOLD}2. Run With Private Proxy{Colors.RESET}")
+                print(f"{Colors.WHITE + Colors.BOLD}3. Run Without Proxy{Colors.RESET}")
+                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Colors.RESET}").strip()) # Corrected
 
-                if choose in [1, 2]:
+                if choose in [1, 2, 3]:
                     proxy_type = (
-                        "With Private" if choose == 1 else 
+                        "With Free Proxyscrape" if choose == 1 else 
+                        "With Private" if choose == 2 else 
                         "Without"
                     )
                     print(f"{Colors.GREEN + Colors.BOLD}Run {proxy_type} Proxy Selected.{Colors.RESET}")
                     break
                 else:
-                    print(f"{Colors.RED + Colors.BOLD}Please enter either 1 or 2.{Colors.RESET}")
+                    print(f"{Colors.RED + Colors.BOLD}Please enter either 1, 2 or 3.{Colors.RESET}")
             except ValueError:
-                print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1 or 2).{Colors.RESET}")
+                print(f"{Colors.RED + Colors.BOLD}Invalid input. Enter a number (1, 2 or 3).{Colors.RESET}")
 
         rotate = False
-        if choose == 1: # Only ask for rotate if private proxy is selected
+        if choose in [1, 2]:
             while True:
-                rotate = input(f"{Colors.BLUE + Colors.BOLD}Rotate Invalid Proxy? [y/n] -> {Colors.RESET}").strip()
+                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Colors.RESET}").strip() # Corrected
 
                 if rotate in ["y", "n"]:
                     rotate = rotate == "y"
@@ -526,7 +535,7 @@ class Gotchipus:
         else:
             logger.error("Perform On-Chain Failed")
 
-    async def process_option_1(self, account: str, address: str, use_proxy):
+    async def process_option_1(self, account: str, address: str, use_proxy: bool):
         logger.step("Checking-In...")
 
         proxy = self.get_next_proxy_for_account(address) if use_proxy else None
@@ -582,7 +591,7 @@ class Gotchipus:
             err_msg = tasks.get("message", "Unknown Error")
             logger.error(f"Fetch Last Check-In Failed - {err_msg}")
 
-    async def process_option_2(self, account: str, address: str, use_proxy):
+    async def process_option_2(self, account: str, address: str, use_proxy: bool):
         logger.step("Minting NFT...")
         balance = await self.get_token_balance(address, use_proxy)
         fees = 0.000355
@@ -596,7 +605,7 @@ class Gotchipus:
         
         await self.process_perform_mint_nft(account, address, use_proxy)
 
-    async def process_option_3(self, account: str, address: str, use_proxy):
+    async def process_option_3(self, account: str, address: str, use_proxy: bool):
         logger.step("Claiming Wearable...")
         balance = await self.get_token_balance(address, use_proxy)
         fees = 0.0007
@@ -634,16 +643,25 @@ class Gotchipus:
             
             self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
             
-            # Since only "Run All Features" is an option now, directly execute all three.
-            logger.step("Running All Features...")
-            
-            await self.process_option_1(account, address, use_proxy)
-            await asyncio.sleep(5)
+            if option == 1:
+                logger.info("Option: Claim Daily Check-In")
+                await self.process_option_1(account, address, use_proxy)
+            elif option == 2:
+                logger.info("Option: Mint Gotchipus NFT")
+                await self.process_option_2(account, address, use_proxy)
+            elif option == 3:
+                logger.info("Option: Claim Wearable")
+                await self.process_option_3(account, address, use_proxy)
+            else: # option == 4 (Run All Features)
+                logger.info("Option: Run All Features")
+                
+                await self.process_option_1(account, address, use_proxy)
+                await asyncio.sleep(5)
 
-            await self.process_option_2(account, address, use_proxy)
-            await asyncio.sleep(5)
+                await self.process_option_2(account, address, use_proxy)
+                await asyncio.sleep(5)
 
-            await self.process_option_3(account, address, use_proxy)
+                await self.process_option_3(account, address, use_proxy)
 
     async def main(self):
         try:
@@ -654,7 +672,7 @@ class Gotchipus:
 
             while True:
                 use_proxy = False
-                if use_proxy_choice == 1: # 1 for private proxy now
+                if use_proxy_choice in [1, 2]:
                     use_proxy = True
 
                 self.clear_terminal()
@@ -711,7 +729,7 @@ if __name__ == "__main__":
         asyncio.run(bot.main())
     except KeyboardInterrupt:
         print(
-            f"{Colors.CYAN + Colors.BOLD}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Colors.RESET}"
+            f"{Colors.CYAN + Colors.BOLD}[ {datetime.now().astimezone(wib).strftime('%H:%M:%S %d.%m.%Y')} ]{Colors.RESET}"
             f"{Colors.WHITE + Colors.BOLD} | {Colors.RESET}"
             f"{Colors.RED + Colors.BOLD}[ EXIT ] Gotchipus - BOT{Colors.RESET}                                       "                              
         )
