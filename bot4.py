@@ -61,12 +61,12 @@ async def display_welcome_screen():
     now = datetime.now().astimezone(wib)
     print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
     print("  ╔══════════════════════════════════════╗")
-    print("  ║         D Z A P   B O T            ║")
+    print("  ║           D Z A P   B O T            ║")
     print("  ║                                      ║")
-    print(f"  ║     {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}           ║")
+    print(f"  ║      {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}          ║")
     print("  ║                                      ║")
-    print("  ║     MONAD TESTNET AUTOMATION         ║")
-    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p    ║")
+    print("  ║    MONAD TESTNET AUTOMATION          ║")
+    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p   ║")
     print("  ╚══════════════════════════════════════╝")
     print(f"{Colors.RESET}")
     await asyncio.sleep(1)
@@ -171,26 +171,6 @@ class Gotchipus:
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
     
-    def build_proxy_config(self, proxy=None):
-        if not proxy:
-            return None, None, None
-
-        if proxy.startswith("socks"):
-            connector = ProxyConnector.from_url(proxy)
-            return connector, None, None
-
-        elif proxy.startswith("http"):
-            match = re.match(r"http://(.*?):(.*?)@(.*)", proxy)
-            if match:
-                username, password, host_port = match.groups()
-                clean_url = f"http://{host_port}"
-                auth = BasicAuth(username, password)
-                return None, clean_url, auth
-            else:
-                return None, proxy, None
-
-        raise Exception("Unsupported Proxy Type.")
-    
     def generate_address(self, account: str):
         try:
             account = Account.from_key(account)
@@ -250,7 +230,13 @@ class Gotchipus:
         proxy = self.get_next_proxy_for_account(address) if use_proxy else None
 
         if use_proxy and proxy:
-            request_kwargs["proxies"] = {"http": proxy, "https": proxy}
+            connector, http_proxy, http_proxy_auth = self.build_proxy_config(proxy)
+            if connector:
+                request_kwargs["connector"] = connector
+            elif http_proxy:
+                request_kwargs["proxy"] = http_proxy
+                if http_proxy_auth:
+                    request_kwargs["proxy_auth"] = http_proxy_auth
 
         for attempt in range(retries):
             try:
@@ -273,20 +259,20 @@ class Gotchipus:
 
             return token_balance
         except Exception as e:
-            logger.error(f"Message: {e}")
+            logger.error(f"Failed to get token balance: {e}")
             return None
         
-    async def send_raw_transaction_with_retries(self, account, web3, tx, retries=5):
+    async def send_raw_transaction_with_retries(self, account_pk: str, web3, tx, retries=5):
         for attempt in range(retries):
             try:
-                signed_tx = web3.eth.account.sign_transaction(tx, account)
+                signed_tx = web3.eth.account.sign_transaction(tx, account_pk)
                 raw_tx = web3.eth.send_raw_transaction(signed_tx.raw_transaction)
                 tx_hash = web3.to_hex(raw_tx)
                 return tx_hash
             except TransactionNotFound:
                 pass
             except Exception as e:
-                pass
+                logger.warn(f"Transaction sending failed (attempt {attempt+1}/{retries}): {e}")
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Hash Not Found After Maximum Retries")
 
@@ -298,7 +284,7 @@ class Gotchipus:
             except TransactionNotFound:
                 pass
             except Exception as e:
-                pass
+                logger.warn(f"Receipt not found (attempt {attempt+1}/{retries}): {e}")
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Receipt Not Found After Maximum Retries")
 
@@ -334,7 +320,7 @@ class Gotchipus:
             logger.tx_success("NFT Mint Transaction Sent!")
             return tx_hash, block_number
         except Exception as e:
-            logger.error(f"Message: {e}")
+            logger.error(f"Failed to mint NFT: {e}")
             return None, None
         
     async def perform_claim_wearable(self, account: str, address: str, use_proxy: bool):
@@ -346,13 +332,13 @@ class Gotchipus:
             contract_address = web3.to_checksum_address(self.GOTCHIPUS_CONTRACT_ADDRESS)
             token_contract = web3.eth.contract(address=contract_address, abi=self.MINT_CONTRACT_ABI)
 
-            mint_data = token_contract.functions.claimWearable()
-            estimated_gas = mint_data.estimate_gas({"from": address})
+            claim_data = token_contract.functions.claimWearable() # Renamed from mint_data for clarity
+            estimated_gas = claim_data.estimate_gas({"from": address})
 
             max_priority_fee = web3.to_wei(1, "gwei")
             max_fee = max_priority_fee
 
-            mint_tx = mint_data.build_transaction({
+            claim_tx = claim_data.build_transaction({ # Renamed from mint_tx for clarity
                 "from": address,
                 "gas": int(estimated_gas * 1.2),
                 "maxFeePerGas": int(max_fee),
@@ -361,7 +347,7 @@ class Gotchipus:
                 "chainId": web3.eth.chain_id,
             })
 
-            tx_hash = await self.send_raw_transaction_with_retries(account, web3, mint_tx)
+            tx_hash = await self.send_raw_transaction_with_retries(account, web3, claim_tx)
             receipt = await self.wait_for_receipt_with_retries(web3, tx_hash)
 
             block_number = receipt.blockNumber
@@ -369,7 +355,7 @@ class Gotchipus:
             logger.tx_success("Wearable Claim Transaction Sent!")
             return tx_hash, block_number
         except Exception as e:
-            logger.error(f"Message: {e}")
+            logger.error(f"Failed to claim wearable: {e}")
             return None, None
         
     def print_question(self):
@@ -505,76 +491,6 @@ class Gotchipus:
                 logger.warn(f"Not Claimed - {e}")
                 return None
     
-    async def process_perform_mint_nft(self, account: str, address: str, use_proxy: bool):
-        try:
-            logger.tx_sent("Attempting to Mint NFT...")
-            web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3: return None, None
-
-            contract_address = web3.to_checksum_address(self.GOTCHIPUS_CONTRACT_ADDRESS)
-            token_contract = web3.eth.contract(address=contract_address, abi=self.MINT_CONTRACT_ABI)
-
-            mint_data = token_contract.functions.freeMint()
-            estimated_gas = mint_data.estimate_gas({"from": address})
-
-            max_priority_fee = web3.to_wei(0, "gwei")
-            max_fee = max_priority_fee
-
-            mint_tx = mint_data.build_transaction({
-                "from": address,
-                "gas": int(estimated_gas * 1.2),
-                "maxFeePerGas": int(max_fee),
-                "maxPriorityFeePerGas": int(max_priority_fee),
-                "nonce": self.used_nonce[address],
-                "chainId": web3.eth.chain_id,
-            })
-
-            tx_hash = await self.send_raw_transaction_with_retries(account, web3, mint_tx)
-            receipt = await self.wait_for_receipt_with_retries(web3, tx_hash)
-
-            block_number = receipt.blockNumber
-            self.used_nonce[address] += 1
-            logger.tx_success("NFT Mint Transaction Sent!")
-            return tx_hash, block_number
-        except Exception as e:
-            logger.error(f"Message: {e}")
-            return None, None
-        
-    async def perform_claim_wearable(self, account: str, address: str, use_proxy: bool):
-        try:
-            logger.tx_sent("Attempting to Claim Wearable...")
-            web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3: return None, None
-
-            contract_address = web3.to_checksum_address(self.GOTCHIPUS_CONTRACT_ADDRESS)
-            token_contract = web3.eth.contract(address=contract_address, abi=self.MINT_CONTRACT_ABI)
-
-            mint_data = token_contract.functions.claimWearable()
-            estimated_gas = mint_data.estimate_gas({"from": address})
-
-            max_priority_fee = web3.to_wei(1, "gwei")
-            max_fee = max_priority_fee
-
-            mint_tx = mint_data.build_transaction({
-                "from": address,
-                "gas": int(estimated_gas * 1.2),
-                "maxFeePerGas": int(max_fee),
-                "maxPriorityFeePerGas": int(max_priority_fee),
-                "nonce": self.used_nonce[address],
-                "chainId": web3.eth.chain_id,
-            })
-
-            tx_hash = await self.send_raw_transaction_with_retries(account, web3, mint_tx)
-            receipt = await self.wait_for_receipt_with_retries(web3, tx_hash)
-
-            block_number = receipt.blockNumber
-            self.used_nonce[address] += 1
-            logger.tx_success("Wearable Claim Transaction Sent!")
-            return tx_hash, block_number
-        except Exception as e:
-            logger.error(f"Message: {e}")
-            return None, None
-        
     async def process_option_1(self, account: str, address: str, use_proxy: bool):
         logger.step("Checking-In...")
 
@@ -636,11 +552,10 @@ class Gotchipus:
         balance = await self.get_token_balance(address, use_proxy)
         fees = 0.000355
 
-        logger.info(f"Balance: {balance} PHRS")
-        logger.info(f"Mint Fee: {fees} PHRS")
+        logger.info(f"Current Balance: {balance:.8f} PHRS | Estimated Mint Fee: {fees:.4f} PHRS")
 
-        if not balance or balance <=  fees:
-            logger.warn("Insufficient PHRS Token Balance")
+        if not balance or balance <= fees:
+            logger.warn("Insufficient PHRS Token Balance for NFT Mint.")
             return
         
         await self.perform_mint_nft(account, address, use_proxy)
@@ -649,21 +564,19 @@ class Gotchipus:
         logger.step("Claiming Wearable...")
         balance = await self.get_token_balance(address, use_proxy)
         fees = 0.0007
-        logger.info(f"Balance: {balance} PHRS")
-        logger.info(f"Mint Fee: {fees} PHRS")
+        logger.info(f"Current Balance: {balance:.8f} PHRS | Estimated Claim Fee: {fees:.4f} PHRS")
 
-        if not balance or balance <=  fees:
-            logger.warn("Insufficient PHRS Token Balance")
+        if not balance or balance <= fees:
+            logger.warn("Insufficient PHRS Token Balance for Wearable Claim.")
             return
         
-        # PERBAIKAN DI SINI: Mengganti process_perform_claim_wearable menjadi perform_claim_wearable
-        await self.perform_claim_wearable(account, address, use_proxy) 
+        await self.perform_claim_wearable(account, address, use_proxy)
 
     async def process_check_connection(self, address: int, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
             if not use_proxy: # If no proxy selected, bypass proxy connection check message
-                break 
+                break  
             logger.info(f"Proxy: {proxy}")
 
             is_valid = await self.check_connection(proxy)
@@ -671,10 +584,9 @@ class Gotchipus:
                 if rotate_proxy:
                     proxy = self.rotate_proxy_for_account(address)
                     continue
-
-                return False
+                return False # If not rotating, and proxy is invalid, return False
             
-            return True
+            return True # If proxy is valid, or no proxy used, return True
 
     async def process_accounts(self, account: str, address: str, option: int, use_proxy: bool, rotate_proxy: bool):
         # Only check connection if a proxy is being used
@@ -698,7 +610,8 @@ class Gotchipus:
             logger.info("Option: Mint Gotchipus NFT")
             await self.process_option_2(account, address, use_proxy)
         elif option == 3:
-            logger.info("Option: Claim Wearable")
+            # Tidak perlu lagi mencetak "Option: Claim Wearable" di sini,
+            # karena process_option_3 sudah memiliki logger.step("Claiming Wearable...")
             await self.process_option_3(account, address, use_proxy)
         else: # option == 4 (Run All Features)
             logger.info("Option: Run All Features")
@@ -738,50 +651,24 @@ class Gotchipus:
                 for account in accounts:
                     if account:
                         address = self.generate_address(account)
-                        if not address:
-                            logger.error(f"Invalid Private Key: {account}")
-                            continue
-
-                        masked_account = self.mask_account(address)
-                        logger.step(f"Processing Account {masked_account}")
-
-                        await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
-                        print(f"{Fore.CYAN + Style.BRIGHT}{separator}{Style.RESET_ALL}")
-                        await asyncio.sleep(2) # Add a small delay between accounts
-
-                print(f"\\n{Fore.CYAN + Style.BRIGHT}{'='*72}{Style.RESET_ALL}")
-                print(f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-                      f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-                      f"{Fore.CYAN + Style.BRIGHT}[ All Accounts Have Been Processed ]{Style.RESET_ALL}"
-                      f"{Fore.WHITE + Style.BRIGHT}={Style.RESET_ALL}"*72)
-                seconds = 24 * 60 * 60
-                while seconds > 0:
-                    formatted_time = self.format_seconds(seconds)
-                    print(
-                        f"{Fore.CYAN+Style.BRIGHT}[ Wait for{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} {formatted_time} {Style.RESET_ALL}"
-                        f"{Fore.CYAN+Style.BRIGHT}... ]{Style.RESET_ALL}"
-                        f"{Fore.WHITE+Style.BRIGHT} | {Style.RESET_ALL}"
-                        f"{Fore.BLUE+Style.BRIGHT}All Accounts Have Been Processed.{Style.RESET_ALL}",
-                        end="\r"
-                    )
-                    await asyncio.sleep(1)
-                    seconds -= 1
+                        if address:
+                            logger.info(f"{separator}{Colors.CYAN}{self.mask_account(address)}{Colors.GREEN}{separator}")
+                            await self.process_accounts(account, address, option, use_proxy, rotate_proxy)
+                        else:
+                            logger.error(f"Invalid private key found: {account}")
+                
+                # After processing all accounts, decide if we loop or exit
+                if input(f"\n{Colors.CYAN}Tasks completed. Press Enter to run again or type 'exit' to quit: {Colors.RESET}").lower() == 'exit':
+                    break
 
             except FileNotFoundError:
-                self.log(f"{Fore.RED}File 'accounts.txt' Not Found.{Style.RESET_ALL}")
-                return
+                logger.error("accounts.txt not found. Please create the file and add your private keys.")
+                await asyncio.sleep(10)
             except Exception as e:
-                self.log(f"{Fore.RED+Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
-                raise e
+                logger.error(f"An unexpected error occurred in main loop: {e}")
+                await asyncio.sleep(10)
+
 
 if __name__ == "__main__":
-    try:
-        bot = Gotchipus()
-        asyncio.run(bot.main())
-    except KeyboardInterrupt:
-        print(
-            f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
-            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
-            f"{Fore.YELLOW + Style.BRIGHT}Program Stopped By User.{Style.RESET_ALL}"
-        )
+    bot = Gotchipus()
+    asyncio.run(bot.main())
