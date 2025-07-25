@@ -54,7 +54,7 @@ def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 async def display_welcome_screen():
-    clear_console()
+    # clear_console() # Hapus baris ini agar menu tidak berpindah layar
     now = datetime.now()
     print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
     print("  ╔══════════════════════════════════════╗")
@@ -66,7 +66,7 @@ async def display_welcome_screen():
     print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p    ║")
     print("  ╚══════════════════════════════════════╝")
     print(f"{Colors.RESET}")
-    await asyncio.sleep(1) # Keep this brief, or remove if you want instant menu
+    # await asyncio.sleep(1) # Hapus atau kurangi waktu sleep jika ingin instant menu
 
 class SocialTipBot:
     def __init__(self) -> None:
@@ -87,6 +87,8 @@ class SocialTipBot:
         self.proxies = []
         self.use_proxy = False
         self.accounts = []
+        self.min_delay = 0
+        self.max_delay = 0
         
         # ABI, only contains "tip" method with corrected booleans
         self.contract_abi = [
@@ -272,7 +274,7 @@ class SocialTipBot:
             return False
 
     async def show_main_menu(self):
-        clear_console()
+        # clear_console() # Hapus baris ini agar menu tidak membersihkan konsol
         print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== DZAP BOT MENU ===")
         print(f"{Colors.RESET}")
         print("1. Kirim Tip")
@@ -292,7 +294,7 @@ class SocialTipBot:
         return choice
 
     async def handle_send_tip(self):
-        clear_console()
+        clear_console() # Tetap bersihkan konsol saat masuk ke sub-menu
         print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== KIRIM TIP ===")
         print(f"{Colors.RESET}")
         
@@ -308,8 +310,7 @@ class SocialTipBot:
             max_amount = float(max_amount_str.strip())
             if min_amount <= 0 or max_amount <= 0 or min_amount > max_amount:
                 raise ValueError
-            amount_to_send = random.uniform(min_amount, max_amount)
-            logger.info(f"Jumlah acak yang dipilih: {amount_to_send:.6f}")
+            
         except ValueError:
             logger.error("Rentang jumlah tidak valid! Harap masukkan format 'min-max' dengan angka positif (misal: 0.01-0.05).")
             await asyncio.sleep(2)
@@ -331,33 +332,62 @@ class SocialTipBot:
             logger.warn("Tidak ada file proxies.txt ditemukan, melanjutkan tanpa proxy.")
             self.use_proxy = False
 
+        # Input untuk Min Delay dan Max Delay
+        try:
+            min_delay_str = input(f"\n{Colors.CYAN}Masukkan delay minimum antar transaksi (detik): {Colors.RESET}")
+            self.min_delay = int(min_delay_str.strip())
+            max_delay_str = input(f"{Colors.CYAN}Masukkan delay maksimum antar transaksi (detik): {Colors.RESET}")
+            self.max_delay = int(max_delay_str.strip())
+            if self.min_delay < 0 or self.max_delay < 0 or self.min_delay > self.max_delay:
+                raise ValueError
+            logger.info(f"Delay antar transaksi diatur antara {self.min_delay}-{self.max_delay} detik.")
+        except ValueError:
+            logger.error("Delay tidak valid! Harap masukkan angka bulat positif.")
+            await asyncio.sleep(2)
+            return
+
         print("\nAkun yang Tersedia:")
         for i, acc in enumerate(self.accounts, 1):
             print(f"{i}. {acc.address}")
             
-        acc_choice = input(f"\n{Colors.CYAN}Pilih akun (1-{len(self.accounts)}): {Colors.RESET}")
-        try:
-            account = self.accounts[int(acc_choice)-1]
-        except (ValueError, IndexError):
-            logger.error("Pilihan tidak valid! Harap masukkan angka yang valid.")
-            await asyncio.sleep(2)
-            return
-            
-        username = self.generate_random_username()
+        acc_choice = input(f"\n{Colors.CYAN}Pilih akun (1-{len(self.accounts)}) atau 'all' untuk semua akun: {Colors.RESET}")
         
-        logger.step(f"Mencoba mengirim {amount_to_send:.6f} token (di Router: {self.checksum_router_address}) ke @{username} dari {account.address}...")
-        
-        selected_proxy = None
-        if self.use_proxy and self.proxies:
-            selected_proxy = random.choice(self.proxies)
-            logger.info(f"Menggunakan proxy: {selected_proxy}")
-            logger.warn("Pengaturan proxy untuk panggilan Web3.py RPC memerlukan konfigurasi yang lebih lanjut (misalnya, transport kustom). Proxy yang dipilih dicatat tetapi tidak langsung diterapkan pada transaksi blockchain dalam pengaturan ini.")
-
-        success = await self.send_tip(account, username, amount_to_send)
-        if success:
-            logger.success("Tip berhasil dikirim!")
+        selected_accounts = []
+        if acc_choice.lower() == 'all':
+            selected_accounts = self.accounts
+            logger.info(f"Semua {len(selected_accounts)} akun dipilih.")
         else:
-            logger.error("Gagal mengirim tip!")
+            try:
+                account = self.accounts[int(acc_choice)-1]
+                selected_accounts.append(account)
+                logger.info(f"Akun {account.address} dipilih.")
+            except (ValueError, IndexError):
+                logger.error("Pilihan tidak valid! Harap masukkan angka yang valid atau 'all'.")
+                await asyncio.sleep(2)
+                return
+        
+        for account in selected_accounts:
+            amount_to_send = random.uniform(min_amount, max_amount)
+            username = self.generate_random_username()
+            
+            logger.step(f"Mencoba mengirim {amount_to_send:.6f} token (di Router: {self.checksum_router_address}) ke @{username} dari {account.address}...")
+            
+            selected_proxy = None
+            if self.use_proxy and self.proxies:
+                selected_proxy = random.choice(self.proxies)
+                logger.info(f"Menggunakan proxy: {selected_proxy}")
+                logger.warn("Pengaturan proxy untuk panggilan Web3.py RPC memerlukan konfigurasi yang lebih lanjut (misalnya, transport kustom). Proxy yang dipilih dicatat tetapi tidak langsung diterapkan pada transaksi blockchain dalam pengaturan ini.")
+
+            success = await self.send_tip(account, username, amount_to_send)
+            if success:
+                logger.success("Tip berhasil dikirim!")
+            else:
+                logger.error("Gagal mengirim tip!")
+            
+            if len(selected_accounts) > 1: # Apply delay only if multiple accounts are being processed
+                delay = random.randint(self.min_delay, self.max_delay)
+                logger.loading(f"Menunggu {delay} detik sebelum akun berikutnya...")
+                await asyncio.sleep(delay)
             
         input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
 
@@ -386,6 +416,7 @@ class SocialTipBot:
         await display_welcome_screen() # Display welcome once
         
         while True:
+            # Tidak membersihkan konsol di sini agar menu utama tetap di bawah welcome screen
             choice = await self.show_main_menu() # Always return to main menu
             
             if choice == '1':
