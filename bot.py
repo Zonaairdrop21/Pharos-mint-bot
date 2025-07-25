@@ -82,7 +82,7 @@ class SocialTipBot:
         }
         self.BASE_API = "https://api.pharosnetwork.xyz"
         self.RPC_URL = "https://testnet.dplabs-internal.com"
-        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02"
+        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02" # Alamat ini akan diubah ke checksum
         self.proxies = []
         self.use_proxy = False
         self.accounts = []
@@ -156,8 +156,12 @@ class SocialTipBot:
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
         
         # self.w3.middleware_onion.inject(geth_poa_middleware, layer=0) # Baris ini dihapus/dikomentari
+        
+        # Mengubah alamat Router menjadi checksum address
+        checksum_router_address = self.w3.to_checksum_address(self.Router)
+        
         self.contract = self.w3.eth.contract(
-            address=self.Router,
+            address=checksum_router_address, # Menggunakan alamat checksum
             abi=self.contract_abi
         )
 
@@ -212,7 +216,7 @@ class SocialTipBot:
         try:
             tip_token = {
                 "tokenType": 1,
-                "tokenAddress": self.Router
+                "tokenAddress": self.w3.to_checksum_address(self.Router) # Pastikan juga di sini
             }
             
             tip_recipient = {
