@@ -198,6 +198,7 @@ class SocialTipBot:
             balance = await asyncio.to_thread(self.w3.eth.get_balance, account.address)
             return {
                 'eth': self.w3.from_wei(balance, 'ether'),
+                'token': ""
             }
         except Exception as e:
             logger.error(f"Balance check failed for {account.address}: {str(e)}")
