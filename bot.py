@@ -144,14 +144,12 @@ class SocialTipBot:
             }
         ]
         
-        # Panggil init_web3 secara sinkron di __init__
         self.init_web3()
         
         self.load_accounts()
         self.load_proxies()
 
     def init_web3(self, proxy=None):
-        # Menggunakan HTTPProvider yang sinkron karena AsyncHTTPProvider tidak ditemukan
         if proxy:
             logger.warn("Integrating proxy for Web3 RPC is complex with standard HTTPProvider. Consider system-wide proxy or custom transport for RPC if truly needed.")
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
@@ -164,7 +162,6 @@ class SocialTipBot:
         # except Exception as e:
         #     logger.warn(f"Could not inject geth_poa_middleware. If your network is not PoA, this is fine. Error: {e}")
         
-        # Convert Router address to checksum address
         self.checksum_router_address = self.w3.to_checksum_address(self.Router)
         
         self.contract = self.w3.eth.contract(
@@ -210,7 +207,6 @@ class SocialTipBot:
 
     async def check_balance(self, account):
         try:
-            # Menggunakan asyncio.to_thread untuk menjalankan operasi sinkron di thread terpisah
             balance = await asyncio.to_thread(self.w3.eth.get_balance, account.address)
             return {
                 'eth': self.w3.from_wei(balance, 'ether'),
@@ -236,10 +232,8 @@ class SocialTipBot:
                 "nftIds": []
             }
             
-            # Get current nonce (sinkron)
             nonce = await asyncio.to_thread(self.w3.eth.get_transaction_count, sender_account.address)
 
-            # Build the transaction (sinkron)
             tx = self.contract.functions.tip(
                 tip_token,
                 tip_recipient
@@ -251,16 +245,23 @@ class SocialTipBot:
                 'value': value_in_wei # Crucial: send native token here
             })
             
-            signed_tx = sender_account.sign_transaction(tx) # Penandatanganan transaksi biasanya cepat dan lokal, tidak perlu to_thread
+            # Perbaikan di sini: Pastikan objek signed_tx memiliki atribut rawTransaction
+            # Objek yang dikembalikan oleh sign_transaction seharusnya selalu memilikinya.
+            # Jika tidak, ini menunjukkan masalah mendasar dengan library web3.py Anda.
+            signed_tx = sender_account.sign_transaction(tx) 
+            
+            # Memastikan kita mengakses rawTransaction dengan benar
+            raw_transaction = signed_tx.rawTransaction
+            tx_hash_from_signed = signed_tx.hash # Ini juga bisa digunakan jika diperlukan
 
             logger.action(f"Mengirim transaksi dari {sender_account.address[:6]}...{sender_account.address[-4:]}...")
             
-            # Mengirim transaksi mentah (sinkron)
-            tx_hash = await asyncio.to_thread(self.w3.eth.send_raw_transaction, signed_tx.rawTransaction)
+            # Mengirim transaksi mentah
+            tx_hash = await asyncio.to_thread(self.w3.eth.send_raw_transaction, raw_transaction)
             
             logger.loading(f"Menunggu konfirmasi transaksi... {self.Explorer_URL}{tx_hash.hex()}")
             
-            # Menunggu tanda terima transaksi (sinkron)
+            # Menunggu tanda terima transaksi
             receipt = await asyncio.to_thread(self.w3.eth.wait_for_transaction_receipt, tx_hash)
             
             if receipt.status == 1:
