@@ -6,8 +6,6 @@ from datetime import datetime
 from colorama import Fore, Style, init
 from fake_useragent import FakeUserAgent
 from web3 import Web3
-# from web3.middleware.geth import geth_poa_middleware # Baris ini tetap dikomentari sesuai permintaan
-import aiohttp # aiohttp tetap diperlukan untuk potential future async HTTP requests jika tidak menggunakan Web3's built-in async
 
 init(autoreset=True)
 
@@ -44,9 +42,9 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def action(msg): Logger.log("ACTION", "↪️", msg, Colors.CYAN) # For transaction initiation
+    def action(msg): Logger.log("ACTION", "↪️", msg, Colors.CYAN)
     @staticmethod
-    def actionSuccess(msg): Logger.log("ACTION", "✅", msg, Colors.GREEN) # For transaction success with explorer link
+    def actionSuccess(msg): Logger.log("ACTION", "✅", msg, Colors.GREEN)
 
 logger = Logger()
 
@@ -54,7 +52,6 @@ def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 async def display_welcome_screen():
-    # clear_console() # Hapus baris ini agar menu tidak berpindah layar
     now = datetime.now()
     print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
     print("  ╔══════════════════════════════════════╗")
@@ -66,13 +63,12 @@ async def display_welcome_screen():
     print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p    ║")
     print("  ╚══════════════════════════════════════╝")
     print(f"{Colors.RESET}")
-    # await asyncio.sleep(1) # Hapus atau kurangi waktu sleep jika ingin instant menu
 
 class SocialTipBot:
     def __init__(self) -> None:
         self.headers = {
             "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9", # Changed to en-US
             "Origin": "https://pay.primuslabs.xyz/",
             "Referer": "https://pay.primuslabs.xyz/",
             "Sec-Fetch-Dest": "empty",
@@ -82,15 +78,14 @@ class SocialTipBot:
         }
         self.BASE_API = "https://api.pharosnetwork.xyz"
         self.RPC_URL = "https://testnet.dplabs-internal.com"
-        self.Explorer_URL = "https://explorer.dplabs-internal.com/tx/" # Example explorer URL, adjust if different
-        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02" # This address will be converted to checksum
+        self.Explorer_URL = "https://explorer.dplabs-internal.com/tx/"
+        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02"
         self.proxies = []
         self.use_proxy = False
         self.accounts = []
         self.min_delay = 0
         self.max_delay = 0
         
-        # ABI, only contains "tip" method with corrected booleans
         self.contract_abi = [
             {
                 "inputs": [
@@ -141,7 +136,7 @@ class SocialTipBot:
                 ],
                 "name": "tip",
                 "outputs": [],
-                "stateMutability": "payable", # Crucial for sending native token as value
+                "stateMutability": "payable",
                 "type": "function"
             }
         ]
@@ -153,16 +148,10 @@ class SocialTipBot:
 
     def init_web3(self, proxy=None):
         if proxy:
-            logger.warn("Integrating proxy for Web3 RPC is complex with standard HTTPProvider. Consider system-wide proxy or custom transport for RPC if truly needed.")
+            # logger.warn("Integrating proxy for Web3 RPC is complex with standard HTTPProvider. Consider system-wide proxy or custom transport for RPC if truly needed.") # Removed explanation
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
         else:
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
-        
-        # # Inject PoA middleware if your chain requires it (e.g., Geth PoA) - Baris ini tetap dikomentari
-        # try:
-        #     self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
-        # except Exception as e:
-        #     logger.warn(f"Could not inject geth_poa_middleware. If your network is not PoA, this is fine. Error: {e}")
         
         self.checksum_router_address = self.w3.to_checksum_address(self.Router)
         
@@ -181,14 +170,12 @@ class SocialTipBot:
                             account = self.w3.eth.account.from_key(line)
                             self.accounts.append(account)
                         except ValueError:
-                            logger.error(f"Kunci pribadi tidak valid: {line[:6]}...{line[-4:]}")
-            logger.success(f"Memuat {len(self.accounts)} akun")
+                            logger.error(f"Invalid private key: {line[:6]}...{line[-4:]}")
+            logger.success(f"Loaded {len(self.accounts)} accounts.")
             if not self.accounts:
-                logger.error("Tidak ada akun valid yang ditemukan di accounts.txt. Harap tambahkan kunci pribadi.")
-                # exit() # Jangan langsung keluar, biarkan user kembali ke menu
+                logger.error("No valid accounts found in accounts.txt. Please add private keys.")
         except FileNotFoundError:
-            logger.error("File accounts.txt tidak ditemukan! Harap buat dan tambahkan kunci pribadi.")
-            # exit() # Jangan langsung keluar, biarkan user kembali ke menu
+            logger.error("accounts.txt not found! Please create it and add private keys.")
 
     def load_proxies(self):
         try:
@@ -197,10 +184,9 @@ class SocialTipBot:
                     line = line.strip()
                     if line and not line.startswith('#'):
                         self.proxies.append(line)
-            logger.success(f"Memuat {len(self.proxies)} proxy")
+            logger.success(f"Loaded {len(self.proxies)} proxies.")
         except FileNotFoundError:
-            # Tidak lagi memberikan peringatan di sini, karena pilihan proxy akan selalu muncul
-            pass 
+            pass # No warning here, proxy choice will always be presented
 
     def generate_random_username(self, platform='x'):
         prefix = '@'
@@ -213,17 +199,17 @@ class SocialTipBot:
             balance = await asyncio.to_thread(self.w3.eth.get_balance, account.address)
             return {
                 'eth': self.w3.from_wei(balance, 'ether'),
-                'token': "Tidak Tersedia (Perlu ABI Token spesifik untuk cek saldo ERC20)"
+                'token': "N/A (Specific ERC20 ABI needed for token balance check)"
             }
         except Exception as e:
-            logger.error(f"Pengecekan saldo gagal untuk {account.address}: {str(e)}")
+            logger.error(f"Balance check failed for {account.address}: {str(e)}")
             return None
 
     async def send_tip(self, sender_account, username, amount):
         try:
             tip_token = {
-                "tokenType": 1, # Assuming 1 for native token (ETH/Pharos token)
-                "tokenAddress": "0x0000000000000000000000000000000000000000" # Zero address for native token
+                "tokenType": 1,
+                "tokenAddress": "0x0000000000000000000000000000000000000000"
             }
             
             value_in_wei = self.w3.to_wei(amount, 'ether')
@@ -231,7 +217,7 @@ class SocialTipBot:
             tip_recipient = {
                 "idSource": "x",
                 "id": username,
-                "amount": value_in_wei, # This amount for the contract's internal logic
+                "amount": value_in_wei,
                 "nftIds": []
             }
             
@@ -243,217 +229,207 @@ class SocialTipBot:
             ).build_transaction({
                 'from': sender_account.address,
                 'nonce': nonce,
-                'gas': 300000, # Consider fetching gas_limit estimate_gas
-                'gasPrice': self.w3.to_wei('50', 'gwei'), # Consider fetching current gas price
-                'value': value_in_wei # Crucial: send native token here
+                'gas': 300000,
+                'gasPrice': self.w3.to_wei('50', 'gwei'),
+                'value': value_in_wei
             })
             
             signed_tx = sender_account.sign_transaction(tx) 
-            
-            # PERUBAHAN KRUSIAL DI SINI: Menggunakan .raw_transaction (snake_case)
             raw_transaction = signed_tx.raw_transaction
-            # tx_hash_from_signed = signed_tx.hash # Ini juga bisa digunakan jika diperlukan
 
-            logger.action(f"Mengirim transaksi dari {sender_account.address[:6]}...{sender_account.address[-4:]}...")
+            logger.action(f"Sending transaction from {sender_account.address[:6]}...{sender_account.address[-4:]}...")
             
             tx_hash = await asyncio.to_thread(self.w3.eth.send_raw_transaction, raw_transaction)
             
-            logger.loading(f"Menunggu konfirmasi transaksi... {self.Explorer_URL}{tx_hash.hex()}")
+            logger.loading(f"Waiting for transaction confirmation... {self.Explorer_URL}{tx_hash.hex()}")
             
             receipt = await asyncio.to_thread(self.w3.eth.wait_for_transaction_receipt, tx_hash)
             
             if receipt.status == 1:
                 explorer_link = f"{self.Explorer_URL}{tx_hash.hex()}"
-                logger.actionSuccess(f"Mengirim {amount} token ke {username} | TX: {tx_hash.hex()} | Explorer: {explorer_link}")
+                logger.actionSuccess(f"Sent {amount} token to {username} | TX: {tx_hash.hex()} | Explorer: {explorer_link}")
                 return True
             else:
-                logger.error(f"Transaksi gagal untuk {username}. Status tanda terima: {receipt.status}")
+                logger.error(f"Transaction failed for {username}. Receipt status: {receipt.status}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error mengirim tip dari {sender_account.address[:6]}...{sender_account.address[-4:]} ke {username}: {str(e)}")
+            logger.error(f"Error sending tip from {sender_account.address[:6]}...{sender_account.address[-4:]} to {username}: {str(e)}")
             return False
 
     async def show_main_menu(self):
-        # clear_console() # Hapus baris ini agar menu tidak membersihkan konsol
         print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== DZAP BOT MENU ===")
         print(f"{Colors.RESET}")
-        print("1. Kirim Tip")
-        print("2. Cek Saldo")
-        print("3. Keluar")
+        print("1. Send Tip")
+        print("2. Check Balance")
+        print("3. Exit")
         
-        choice = input(f"\n{Colors.CYAN}Pilih opsi (1-3): {Colors.RESET}")
+        choice = input(f"\n{Colors.CYAN}Select option (1-3): {Colors.RESET}")
         return choice
 
     async def show_proxy_menu(self):
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== MODE PROXY ===")
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== PROXY MODE ===")
         print(f"{Colors.RESET}")
         print("1. Run with private proxy")
         print("2. Run without proxy")
         
-        choice = input(f"\n{Colors.CYAN}Pilih opsi (1-2): {Colors.RESET}")
+        choice = input(f"\n{Colors.CYAN}Select option (1-2): {Colors.RESET}")
         return choice
 
     async def handle_send_tip(self):
-        clear_console() # Tetap bersihkan konsol saat masuk ke sub-menu
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== KIRIM TIP ===")
+        clear_console()
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SEND TIP ===")
         print(f"{Colors.RESET}")
         
         if not self.accounts:
-            logger.error("Tidak ada akun yang tersedia! Harap tambahkan kunci pribadi ke accounts.txt.")
+            logger.error("No accounts available! Please add private keys to accounts.txt.")
             await asyncio.sleep(2)
             return
 
-        # NEW: Input jumlah transaksi yang diinginkan
         total_transactions = 0
         while True:
             try:
-                num_transactions_str = input(f"\n{Colors.CYAN}Berapa banyak transaksi yang ingin Anda lakukan (misal: 10)? {Colors.RESET}")
+                num_transactions_str = input(f"\n{Colors.CYAN}How many transactions do you want to perform (e.g., 10)? {Colors.RESET}")
                 total_transactions = int(num_transactions_str.strip())
                 if total_transactions <= 0:
                     raise ValueError
                 break
             except ValueError:
-                logger.error("Jumlah transaksi tidak valid! Harap masukkan angka bulat positif.")
+                logger.error("Invalid number of transactions! Please enter a positive integer.")
                 await asyncio.sleep(1)
 
-        # Selalu tampilkan menu proxy
         proxy_choice = await self.show_proxy_menu()
         if proxy_choice == '1':
             if not self.proxies:
-                logger.warn("Anda memilih mode proxy, tetapi tidak ada proxy yang dimuat dari proxies.txt. Akan dilanjutkan tanpa proxy.")
+                logger.warn("You selected private proxy mode, but no proxies were loaded from proxies.txt. Continuing without proxy.")
                 self.use_proxy = False
             else:
                 self.use_proxy = True
-                logger.info("Mode proxy diaktifkan.")
+                logger.info("Private proxy mode enabled.")
         elif proxy_choice == '2':
             self.use_proxy = False
-            logger.info("Mode proxy dinonaktifkan.")
+            logger.info("Private proxy mode disabled.")
         else:
-            logger.error("Pilihan tidak valid! Membatalkan.")
+            logger.error("Invalid choice! Cancelling.")
             await asyncio.sleep(1)
             return
 
-        amount_range_str = input(f"\n{Colors.CYAN}Masukkan rentang jumlah yang ingin dikirim (misal: 0.01-0.05): {Colors.RESET}")
+        amount_range_str = input(f"\n{Colors.CYAN}Enter the amount range to send (e.g., 0.01-0.05): {Colors.RESET}")
         try:
             min_amount_str, max_amount_str = amount_range_str.split('-')
             min_amount = float(min_amount_str.strip())
             max_amount = float(max_amount_str.strip())
             if min_amount <= 0 or max_amount <= 0 or min_amount > max_amount:
                 raise ValueError
-            logger.info(f"Jumlah acak akan dipilih antara {min_amount:.6f}-{max_amount:.6f}.")
+            logger.info(f"Random amount will be selected between {min_amount:.6f}-{max_amount:.6f}.")
         except ValueError:
-            logger.error("Rentang jumlah tidak valid! Harap masukkan format 'min-max' dengan angka positif (misal: 0.01-0.05).")
+            logger.error("Invalid amount range! Please enter 'min-max' format with positive numbers (e.g., 0.01-0.05).")
             await asyncio.sleep(2)
             return
 
-        # Input untuk Min Delay dan Max Delay
         try:
-            min_delay_str = input(f"\n{Colors.CYAN}Masukkan delay minimum antar transaksi (detik): {Colors.RESET}")
+            min_delay_str = input(f"\n{Colors.CYAN}Enter minimum delay between transactions (seconds): {Colors.RESET}")
             self.min_delay = int(min_delay_str.strip())
-            max_delay_str = input(f"{Colors.CYAN}Masukkan delay maksimum antar transaksi (detik): {Colors.RESET}")
+            max_delay_str = input(f"{Colors.CYAN}Enter maximum delay between transactions (seconds): {Colors.RESET}")
             self.max_delay = int(max_delay_str.strip())
             if self.min_delay < 0 or self.max_delay < 0 or self.min_delay > self.max_delay:
                 raise ValueError
-            logger.info(f"Delay antar transaksi diatur antara {self.min_delay}-{self.max_delay} detik.")
+            logger.info(f"Delay between transactions set between {self.min_delay}-{self.max_delay} seconds.")
         except ValueError:
-            logger.error("Delay tidak valid! Harap masukkan angka bulat positif.")
+            logger.error("Invalid delay! Please enter positive integers.")
             await asyncio.sleep(2)
             return
 
-        print("\nAkun yang Tersedia:")
+        print("\nAvailable Accounts:")
         for i, acc in enumerate(self.accounts, 1):
             print(f"{i}. {acc.address}")
             
-        acc_choice = input(f"\n{Colors.CYAN}Pilih akun (1-{len(self.accounts)}) atau 'all' untuk semua akun: {Colors.RESET}")
+        acc_choice = input(f"\n{Colors.CYAN}Select account (1-{len(self.accounts)}) or 'all' for all accounts: {Colors.RESET}")
         
         selected_accounts = []
         if acc_choice.lower() == 'all':
             selected_accounts = self.accounts
-            logger.info(f"Semua {len(selected_accounts)} akun dipilih.")
+            logger.info(f"All {len(selected_accounts)} accounts selected.")
         else:
             try:
                 account = self.accounts[int(acc_choice)-1]
                 selected_accounts.append(account)
-                logger.info(f"Akun {account.address} dipilih.")
+                logger.info(f"Account {account.address} selected.")
             except (ValueError, IndexError):
-                logger.error("Pilihan tidak valid! Harap masukkan angka yang valid atau 'all'.")
+                logger.error("Invalid choice! Please enter a valid number or 'all'.")
                 await asyncio.sleep(2)
                 return
         
         if not selected_accounts:
-            logger.error("Tidak ada akun yang dipilih untuk transaksi.")
-            input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
+            logger.error("No accounts selected for transactions.")
+            input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
             return
 
-        logger.info(f"Memulai {total_transactions} transaksi...")
+        logger.info(f"Starting {total_transactions} transactions...")
         for i in range(total_transactions):
-            logger.step(f"Transaksi {i+1}/{total_transactions}")
-            account = random.choice(selected_accounts) # Pilih akun secara acak dari yang dipilih
+            logger.step(f"Transaction {i+1}/{total_transactions}")
+            account = random.choice(selected_accounts)
             amount_to_send = random.uniform(min_amount, max_amount)
             username = self.generate_random_username()
             
-            logger.step(f"Mencoba mengirim {amount_to_send:.6f} token (di Router: {self.checksum_router_address}) ke @{username} dari {account.address}...")
+            logger.step(f"Attempting to send {amount_to_send:.6f} token (to Router: {self.checksum_router_address}) to @{username} from {account.address}...")
             
-            # Proxy akan di-handle di level aiohttp jika digunakan, atau Web3.py jika custom transport
-            # Untuk Web3.py standar HTTPProvider, proxy perlu diatur di lingkungan atau sistem
             selected_proxy = None
             if self.use_proxy and self.proxies:
                 selected_proxy = random.choice(self.proxies)
-                logger.info(f"Menggunakan proxy: {selected_proxy}")
-                logger.warn("Pengaturan proxy untuk panggilan Web3.py RPC memerlukan konfigurasi yang lebih lanjut (misalnya, transport kustom). Proxy yang dipilih dicatat tetapi tidak langsung diterapkan pada transaksi blockchain dalam pengaturan ini.")
+                logger.info(f"Using proxy: {selected_proxy}")
+                logger.warn("Proxy setup for Web3.py RPC calls requires more advanced configuration (e.g., custom transport). The selected proxy is noted but not directly applied to blockchain transactions in this setup.")
 
             success = await self.send_tip(account, username, amount_to_send)
             if success:
-                logger.success("Tip berhasil dikirim!")
+                logger.success("Tip sent successfully!")
             else:
-                logger.error("Gagal mengirim tip!")
+                logger.error("Failed to send tip!")
             
-            if i < total_transactions - 1: # Jangan delay setelah transaksi terakhir
+            if i < total_transactions - 1:
                 delay = random.randint(self.min_delay, self.max_delay)
-                logger.loading(f"Menunggu {delay} detik sebelum transaksi berikutnya...")
+                logger.loading(f"Waiting {delay} seconds before next transaction...")
                 await asyncio.sleep(delay)
             
-        input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
+        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
 
 
     async def check_balances_menu(self):
         clear_console()
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SALDO AKUN ===")
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== ACCOUNT BALANCES ===")
         print(f"{Colors.RESET}")
         
         if not self.accounts:
-            logger.error("Tidak ada akun yang tersedia!")
+            logger.error("No accounts available!")
             await asyncio.sleep(2)
             return
             
         for account in self.accounts:
             balances = await self.check_balance(account)
             if balances:
-                print(f"\n{Colors.CYAN}Akun: {account.address}")
-                print(f"{Colors.WHITE}Saldo ETH: {balances['eth']:.6f}")
-                print(f"{Colors.WHITE}Saldo Token: {balances['token']}")
+                print(f"\n{Colors.CYAN}Account: {account.address}")
+                print(f"{Colors.WHITE}ETH Balance: {balances['eth']:.6f}")
+                print(f"{Colors.WHITE}Token Balance: {balances['token']}")
             else:
-                logger.error(f"Gagal memeriksa saldo untuk {account.address}")
+                logger.error(f"Failed to check balance for {account.address}")
         
-        input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
+        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
 
     async def run(self):
-        await display_welcome_screen() # Display welcome once
+        await display_welcome_screen()
         
         while True:
-            # Tidak membersihkan konsol di sini agar menu utama tetap di bawah welcome screen
-            choice = await self.show_main_menu() # Always return to main menu
+            choice = await self.show_main_menu()
             
             if choice == '1':
                 await self.handle_send_tip()
             elif choice == '2':
                 await self.check_balances_menu()
             elif choice == '3':
-                logger.info("Keluar...")
+                logger.info("Exiting...")
                 break
             else:
-                logger.error("Pilihan tidak valid!")
+                logger.error("Invalid option!")
                 await asyncio.sleep(1)
 
 if __name__ == "__main__":
