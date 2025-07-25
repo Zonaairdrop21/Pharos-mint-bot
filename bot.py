@@ -6,7 +6,7 @@ from datetime import datetime
 from colorama import Fore, Style, init
 from fake_useragent import FakeUserAgent
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+from web3.middleware.geth import geth_poa_middleware # Baris ini diperbaiki
 import aiohttp
 
 init(autoreset=True)
@@ -300,10 +300,6 @@ class SocialTipBot:
         if self.use_proxy and self.proxies:
             selected_proxy = random.choice(self.proxies)
             logger.info(f"Menggunakan proxy: {selected_proxy}")
-            # Catatan: Web3.py HTTPProvider tidak langsung mendukung proxy.
-            # Jika proxy ingin digunakan untuk RPC, perlu konfigurasi tingkat sistem
-            # atau penggunaan AsyncHTTPProvider dengan sesi aiohttp yang dikonfigurasi proxy.
-            # Untuk API eksternal (jika ada), Anda akan menggunakan aiohttp.ClientSession dengan proxy_url.
             
         success = await self.send_tip(account, username, amount_to_send)
         if success:
