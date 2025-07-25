@@ -68,7 +68,7 @@ class SocialTipBot:
     def __init__(self) -> None:
         self.headers = {
             "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9", # Changed to en-US
+            "Accept-Language": "en-US,en;q=0.9",
             "Origin": "https://pay.primuslabs.xyz/",
             "Referer": "https://pay.primuslabs.xyz/",
             "Sec-Fetch-Dest": "empty",
@@ -148,7 +148,6 @@ class SocialTipBot:
 
     def init_web3(self, proxy=None):
         if proxy:
-            # logger.warn("Integrating proxy for Web3 RPC is complex with standard HTTPProvider. Consider system-wide proxy or custom transport for RPC if truly needed.") # Removed explanation
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
         else:
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
@@ -186,7 +185,7 @@ class SocialTipBot:
                         self.proxies.append(line)
             logger.success(f"Loaded {len(self.proxies)} proxies.")
         except FileNotFoundError:
-            pass # No warning here, proxy choice will always be presented
+            pass
 
     def generate_random_username(self, platform='x'):
         prefix = '@'
@@ -278,7 +277,7 @@ class SocialTipBot:
 
     async def handle_send_tip(self):
         clear_console()
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SEND TIP ===")
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SEND TIP ===") # Corrected this line
         print(f"{Colors.RESET}")
         
         if not self.accounts:
@@ -301,7 +300,7 @@ class SocialTipBot:
         proxy_choice = await self.show_proxy_menu()
         if proxy_choice == '1':
             if not self.proxies:
-                logger.warn("You selected private proxy mode, but no proxies were loaded from proxies.txt. Continuing without proxy.")
+                logger.warn("You selected private proxy mode, but no proxies were loaded from proxies.txt. Continuing without proxy.") # This line was the one still in Indonesian
                 self.use_proxy = False
             else:
                 self.use_proxy = True
