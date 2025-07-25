@@ -1,24 +1,15 @@
-import threading
-import queue
-import random
-import time
 import os
+import random
 import string
-from web3 import Web3, HTTPProvider
-from eth_account import Account
-from hexbytes import HexBytes
-import logging
-from typing import List, Tuple
-import requests
-from concurrent.futures import ThreadPoolExecutor
-from urllib3.exceptions import HTTPError
-
-# Import for display and time
-from colorama import init, Fore, Style
+import asyncio
 from datetime import datetime
-import asyncio # Used for the display_welcome_screen() function
+from colorama import Fore, Style, init
+from fake_useragent import FakeUserAgent
+from web3 import Web3
+from web3.middleware import geth_poa_middleware
+import aiohttp
 
-# Initialize colorama for terminal color support
+# Initialize colorama
 init(autoreset=True)
 
 # === Terminal Color Setup ===
@@ -32,546 +23,298 @@ class Colors:
     MAGENTA = Fore.MAGENTA
     WHITE = Fore.WHITE
     BRIGHT_GREEN = Fore.LIGHTGREEN_EX
-    BRIGHT_YELLOW = Fore.LIGHTYELLOW_EX
-    BRIGHT_RED = Fore.LIGHTRED_EX
-    BRIGHT_CYAN = Fore.LIGHTCYAN_EX
     BRIGHT_MAGENTA = Fore.LIGHTMAGENTA_EX
     BRIGHT_WHITE = Fore.LIGHTWHITE_EX
     BRIGHT_BLACK = Fore.LIGHTBLACK_EX
 
-class CustomLogger:
+class Logger:
     @staticmethod
     def log(label, symbol, msg, color):
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"{Colors.BRIGHT_BLACK}[{timestamp}]{Colors.RESET} {color}[{symbol}] {msg}{Colors.RESET}")
 
     @staticmethod
-    def info(msg): CustomLogger.log("INFO", "✓", msg, Colors.GREEN)
+    def info(msg): Logger.log("INFO", "✓", msg, Colors.GREEN)
     @staticmethod
-    def warn(msg): CustomLogger.log("WARN", "!", msg, Colors.YELLOW)
+    def warn(msg): Logger.log("WARN", "!", msg, Colors.YELLOW)
     @staticmethod
-    def error(msg): CustomLogger.log("ERR", "✗", msg, Colors.RED)
+    def error(msg): Logger.log("ERR", "✗", msg, Colors.RED)
     @staticmethod
-    def success(msg): CustomLogger.log("OK", "+", msg, Colors.GREEN)
+    def success(msg): Logger.log("OK", "+", msg, Colors.GREEN)
     @staticmethod
-    def loading(msg): CustomLogger.log("LOAD", "⟳", msg, Colors.CYAN)
+    def loading(msg): Logger.log("LOAD", "⟳", msg, Colors.CYAN)
     @staticmethod
-    def step(msg): CustomLogger.log("STEP", "➤", msg, Colors.WHITE)
+    def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def commit_action(msg): CustomLogger.log("COMMIT", "↪️", msg, Colors.CYAN) # Custom for commit
+    def action(msg): Logger.log("ACTION", "↪️", msg, Colors.CYAN)
     @staticmethod
-    def register_success(msg): CustomLogger.log("REGISTER", "✅", msg, Colors.BRIGHT_GREEN) # Custom for register success
+    def actionSuccess(msg): Logger.log("ACTION", "✅", msg, Colors.GREEN)
 
-# Replace default logger with custom logger
-logger = CustomLogger()
+logger = Logger()
 
-# Base configuration (some will be set by user input)
-CONFIG = {
-    'RPC_URL': "https://testnet.dplabs-internal.com",
-    'CONTROLLER_ADDRESS': "0x51be1ef20a1fd5179419738fc71d95a8b6f8a175",
-    'DURATION': 31536000, # Registration duration in seconds (1 year)
-    'RESOLVER': "0x9a43dcA1C3BB268546b98eb2AB1401bFc5b58505",
-    'DATA': [],
-    'REVERSE_RECORD': True,
-    'OWNER_CONTROLLED_FUSES': 0,
-    'CHAIN_ID': 688688  # Chain ID for transactions
-}
-
-# Minimal ABI for the controller contract
-CONTROLLER_ABI = [
-    {
-        "constant": True,
-        "inputs": [
-            {"name": "name", "type": "string"},
-            {"name": "owner", "type": "address"},
-            {"name": "duration", "type": "uint256"},
-            {"name": "secret", "type": "bytes32"},
-            {"name": "resolver", "type": "address"},
-            {"name": "data", "type": "bytes[]"},
-            {"name": "reverseRecord", "type": "bool"},
-            {"name": "ownerControlledFuses", "type": "uint16"}
-        ],
-        "name": "makeCommitment",
-        "outputs": [{"name": "", "type": "bytes32"}],
-        "stateMutability": "pure",
-        "type": "function"
-    },
-    {
-        "constant": False,
-        "inputs": [{"name": "commitment", "type": "bytes32"}],
-        "name": "commit",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "constant": True,
-        "inputs": [
-            {"name": "name", "type": "string"},
-            {"name": "duration", "type": "uint256"}
-        ],
-        "name": "rentPrice",
-        "outputs": [
-            {
-                "components": [
-                    {"name": "base", "type": "uint256"},
-                    {"name": "premium", "type": "uint256"}
-                ],
-                "name": "",
-                "type": "tuple"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "constant": False,
-        "inputs": [
-            {"name": "name", "type": "string"},
-            {"name": "owner", "type": "address"},
-            {"name": "duration", "type": "uint256"},
-            {"name": "secret", "type": "bytes32"},
-            {"name": "resolver", "type": "address"},
-            {"name": "data", "type": "bytes[]"},
-            {"name": "reverseRecord", "type": "bool"},
-            {"name": "ownerControlledFuses", "type": "uint16"}
-        ],
-        "name": "register",
-        "outputs": [],
-        "stateMutability": "payable",
-        "type": "function"
-    }
-]
-
-def clear_screen():
-    """Clears the console screen."""
+def clear_console():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def load_file_lines(filename: str) -> List[str]:
-    """Loads lines from a text file."""
-    try:
-        with open(filename, 'r') as f:
-            return [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        logger.error(f"File '{filename}' not found.")
-        return []
+async def display_welcome_screen():
+    clear_console()
+    now = datetime.now()
+    print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
+    print("  ╔══════════════════════════════════════╗")
+    print("  ║           D Z A P   B O T            ║")
+    print("  ║                                      ║")
+    print(f"  ║     {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}           ║")
+    print("  ║                                      ║")
+    print("  ║     MONAD TESTNET AUTOMATION         ║")
+    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p   ║")
+    print("  ╚══════════════════════════════════════╝")
+    print(f"{Colors.RESET}")
+    await asyncio.sleep(1)
 
-def random_name(length: int = 9) -> str:
-    """
-    Generates a random domain name consisting of lowercase letters (a-z), digits (0-9),
-    and hyphens (-).
-    Rules:
-    - Starts and ends with a letter or digit.
-    - No double hyphens (e.g., "a--b").
-    - Domain name length will match the 'length' parameter.
-    """
-    if length < 3: 
-        length = 3 
+class SocialTipBot:
+    def __init__(self) -> None:
+        self.headers = {
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Origin": "https://pay.primuslabs.xyz/",
+            "Referer": "https://pay.primuslabs.xyz/",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
+            "User-Agent": FakeUserAgent().random
+        }
+        self.BASE_API = "https://api.pharosnetwork.xyz"
+        self.RPC_URL = "https://testnet.dplabs-internal.com"
+        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02"
+        self.proxies = []
+        self.use_proxy = False
+        self.accounts = []
+        
+        # Contract ABI
+        self.contract_abi = [{"inputs":[],"name":"InvalidInitialization","type":"error"},{"inputs":[],"name":"NotInitializing","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"recipient","type":"address"},{"indexed":false,"internalType":"uint64","name":"claimTime","type":"uint64"},{"indexed":false,"internalType":"string","name":"idSource","type":"string"},{"indexed":false,"internalType":"string","name":"id","type":"string"},{"indexed":false,"internalType":"address","name":"tipper","type":"address"},{"indexed":false,"internalType":"address","name":"tokenAddr","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint64","name":"tipTime","type":"uint64"},{"indexed":false,"internalType":"uint32","name":"tokenType","type":"uint32"},{"indexed":false,"internalType":"uint256[]","name":"nftIds","type":"uint256[]"}],"name":"ClaimEvent","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint64","name":"version","type":"uint64"}],"name":"Initialized","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"idSource","type":"string"},{"indexed":false,"internalType":"string","name":"id","type":"string"},{"indexed":false,"internalType":"address","name":"tipper","type":"address"},{"indexed":false,"internalType":"address","name":"tokenAddr","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint64","name":"tipTime","type":"uint64"},{"indexed":false,"internalType":"uint32","name":"tokenType","type":"uint32"},{"indexed":false,"internalType":"uint256[]","name":"nftIds","type":"uint256[]"}],"name":"TipEvent","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"uint64","name":"withdrawTime","type":"uint64"},{"indexed":false,"internalType":"string","name":"idSource","type":"string"},{"indexed":false,"internalType":"string","name":"id","type":"string"},{"indexed":false,"internalType":"address","name":"tipper","type":"address"},{"indexed":false,"internalType":"address","name":"tokenAddr","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint64","name":"tipTime","type":"uint64"},{"indexed":false,"internalType":"uint32","name":"tokenType","type":"uint32"},{"indexed":false,"internalType":"uint256[]","name":"nftIds","type":"uint256[]"}],"name":"WithdrawEvent","type":"event"},{"inputs":[{"internalType":"string[]","name":"sourceName_","type":"string[]"},{"internalType":"string[]","name":"url_","type":"string[]"},{"internalType":"string[]","name":"jsonPath_","type":"string[]"}],"name":"addBatchIdSource","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string[]","name":"idSources","type":"string[]"},{"components":[{"internalType":"address","name":"recipient","type":"address"},{"components":[{"internalType":"string","name":"url","type":"string"},{"internalType":"string","name":"header","type":"string"},{"internalType":"string","name":"method","type":"string"},{"internalType":"string","name":"body","type":"string"}],"internalType":"struct AttNetworkRequest","name":"request","type":"tuple"},{"components":[{"internalType":"string","name":"keyName","type":"string"},{"internalType":"string","name":"parseType","type":"string"},{"internalType":"string","name":"parsePath","type":"string"}],"internalType":"struct AttNetworkResponseResolve[]","name":"reponseResolve","type":"tuple[]"},{"internalType":"string","name":"data","type":"string"},{"internalType":"string","name":"attConditions","type":"string"},{"internalType":"uint64","name":"timestamp","type":"uint64"},{"internalType":"string","name":"additionParams","type":"string"},{"components":[{"internalType":"address","name":"attestorAddr","type":"address"},{"internalType":"string","name":"url","type":"string"}],"internalType":"struct Attestor[]","name":"attestors","type":"tuple[]"},{"internalType":"bytes[]","name":"signatures","type":"bytes[]"}],"internalType":"struct Attestation[]","name":"att","type":"tuple[]"}],"name":"claimByMultiSource","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"string","name":"idSource","type":"string"},{"components":[{"internalType":"address","name":"recipient","type":"address"},{"components":[{"internalType":"string","name":"url","type":"string"},{"internalType":"string","name":"header","type":"string"},{"internalType":"string","name":"method","type":"string"},{"internalType":"string","name":"body","type":"string"}],"internalType":"struct AttNetworkRequest","name":"request","type":"tuple"},{"components":[{"internalType":"string","name":"keyName","type":"string"},{"internalType":"string","name":"parseType","type":"string"},{"internalType":"string","name":"parsePath","type":"string"}],"internalType":"struct AttNetworkResponseResolve[]","name":"reponseResolve","type":"tuple[]"},{"internalType":"string","name":"data","type":"string"},{"internalType":"string","name":"attConditions","type":"string"},{"internalType":"uint64","name":"timestamp","type":"uint64"},{"internalType":"string","name":"additionParams","type":"string"},{"components":[{"internalType":"address","name":"attestorAddr","type":"address"},{"internalType":"string","name":"url","type":"string"}],"internalType":"struct Attestor[]","name":"attestors","type":"tuple[]"},{"internalType":"bytes[]","name":"signatures","type":"bytes[]"}],"internalType":"struct Attestation","name":"att","type":"tuple"}],"name":"claimBySource","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"claimFee","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"feeRecipient","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"components":[{"internalType":"string","name":"idSource","type":"string"},{"internalType":"string","name":"id","type":"string"}],"internalType":"struct TipRecipient","name":"tipRecipient","type":"tuple"}],"name":"getTipRecords","outputs":[{"components":[{"internalType":"uint256","name":"amount","type":"uint256"},{"components":[{"internalType":"uint32","name":"tokenType","type":"uint32"},{"internalType":"address","name":"tokenAddress","type":"address"}],"internalType":"struct TipToken","name":"tipToken","type":"tuple"},{"internalType":"uint64","name":"timestamp","type":"uint64"},{"internalType":"address","name":"tipper","type":"address"},{"internalType":"uint256[]","name":"nftIds","type":"uint256[]"}],"internalType":"struct TipRecord[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"","type":"string"}],"name":"idSourceCache","outputs":[{"internalType":"string","name":"url","type":"string"},{"internalType":"string","name":"jsonPath","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"owner","type":"address"},{"internalType":"contract IPrimusZKTLS","name":"primusZKTLS_","type":"address"},{"internalType":"address","name":"feeRecipient_","type":"address"},{"internalType":"uint256","name":"claimFee_","type":"uint256"}],"name":"initialize","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"primusZKTLS","outputs":[{"internalType":"contract IPrimusZKTLS","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"claimFee_","type":"uint256"}],"name":"setClaimFee","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"feeRecipient_","type":"address"}],"name":"setFeeRecipient","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"contract IPrimusZKTLS","name":"primusZKTLS_","type":"address"}],"name":"setPrimusZKTLS","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"setWithdrawDelay","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"components":[{"internalType":"uint32","name":"tokenType","type":"uint32"},{"internalType":"address","name":"tokenAddress","type":"address"}],"internalType":"struct TipToken","name":"token","type":"tuple"},{"components":[{"internalType":"string","name":"idSource","type":"string"},{"internalType":"string","name":"id","type":"string"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256[]","name":"nftIds","type":"uint256[]"}],"internalType":"struct TipRecipientInfo","name":"recipient","type":"tuple"}],"name":"tip","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"components":[{"internalType":"uint32","name":"tokenType","type":"uint32"},{"internalType":"address","name":"tokenAddress","type":"address"}],"internalType":"struct TipToken","name":"token","type":"tuple"},{"components":[{"internalType":"string","name":"idSource","type":"string"},{"internalType":"string","name":"id","type":"string"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256[]","name":"nftIds","type":"uint256[]"}],"internalType":"struct TipRecipientInfo[]","name":"recipients","type":"tuple[]"}],"name":"tipBatch","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"components":[{"internalType":"string","name":"idSource","type":"string"},{"internalType":"string","name":"id","type":"string"},{"internalType":"uint64","name":"tipTimestamp","type":"uint64"}],"internalType":"struct TipWithdrawInfo[]","name":"tipRecipients","type":"tuple[]"}],"name":"tipperWithdraw","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"withdrawDelay","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
+        
+        # Initialize Web3
+        self.init_web3()
+        
+        # Load accounts and proxies
+        self.load_accounts()
+        self.load_proxies()
 
-    chars_letters = string.ascii_lowercase
-    chars_letters_digits = string.ascii_lowercase + string.digits
-    
-    name_list = []
-
-    # First character must be a letter
-    name_list.append(random.choice(chars_letters))
-
-    for _ in range(length - 1):
-        if name_list[-1] == '-':
-            name_list.append(random.choice(chars_letters_digits))
+    def init_web3(self, proxy=None):
+        if proxy:
+            session = aiohttp.ClientSession()
+            self.w3 = Web3(Web3.AsyncHTTPProvider(
+                self.RPC_URL,
+                {'session': session, 'proxy': proxy}
+            ))
         else:
-            name_list.append(random.choice(chars_letters_digits + '-' * 1)) 
+            self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
+        
+        self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        self.contract = self.w3.eth.contract(
+            address=self.Router,
+            abi=self.contract_abi
+        )
 
-    if name_list[-1] == '-':
-        name_list[-1] = random.choice(chars_letters_digits)
-
-    cleaned_name = []
-    for i, char in enumerate(name_list):
-        if char == '-' and i > 0 and cleaned_name and cleaned_name[-1] == '-':
-            cleaned_name.append(random.choice(chars_letters_digits))
-        else:
-            cleaned_name.append(char)
-            
-    while len(cleaned_name) < length:
-        if cleaned_name and cleaned_name[-1] == '-':
-            cleaned_name.append(random.choice(chars_letters_digits))
-        else:
-            cleaned_name.append(random.choice(chars_letters_digits + '-'))
-
-    final_result = ''.join(cleaned_name[:length])
-    if final_result.startswith('-'):
-        final_result = random.choice(chars_letters_digits) + final_result[1:]
-    if final_result.endswith('-'):
-        final_result = final_result[:-1] + random.choice(chars_letters_digits)
-    
-    final_result = final_result.replace('--', random.choice(chars_letters_digits) + random.choice(chars_letters_digits))
-    
-    while len(final_result) < length:
-        final_result += random.choice(chars_letters_digits)
-
-    return final_result[:length]
-
-
-def test_proxy(proxy: str) -> Tuple[str, bool]:
-    """Tests if a proxy is functional by attempting a connection to api.ipify.org."""
-    try:
-        response = requests.get('https://api.ipify.org', proxies={'http': proxy, 'https': proxy}, timeout=5)
-        return proxy, response.status_code == 200
-    except (requests.RequestException, HTTPError) as e:
-        logger.warn(f"Proxy {proxy} failed to test: {e}") 
-        return proxy, False
-
-def create_web3_instance(proxy: str = None) -> Web3:
-    """Creates a Web3 instance, with or without a proxy."""
-    if proxy:
-        session = requests.Session()
-        session.proxies = {'http': proxy, 'https': proxy}
-        return Web3(HTTPProvider(CONFIG['RPC_URL'], session=session))
-    return Web3(HTTPProvider(CONFIG['RPC_URL']))
-
-def validate_private_key(private_key: str) -> bool:
-    """Validates the format of a private key."""
-    if private_key.startswith('0x'):
-        private_key = private_key[2:]
-    if len(private_key) != 64 or not all(c in string.hexdigits for c in private_key):
-        return False
-    return True
-
-# Counters for success and failure
-success_count = 0
-failed_count = 0
-total_tasks = 0
-current_tasks_processed = 0
-processed_lock = threading.Lock() 
-
-def register_domain_single_task(private_key: str, index: int, reg_index: int, proxy: str = None) -> None:
-    """
-    Performs a full domain registration cycle (Commit -> Pause -> Register).
-    This is designed to be run sequentially PER TASK within its thread.
-    """
-    global success_count, failed_count, current_tasks_processed
-
-    MAX_RETRY = 5
-    retry = 0
-    
-    if not validate_private_key(private_key):
-        logger.error(f"[Wallet #{index+1} | Attempt {reg_index}] Invalid private key, skipping registration.")
-        with processed_lock:
-            failed_count += 1
-            current_tasks_processed += 1
-        return
-
-    w3 = create_web3_instance(proxy)
-    
-    try:
-        account = Account.from_key(private_key)
-        owner_address = account.address
-        controller_address = w3.to_checksum_address(CONFIG['CONTROLLER_ADDRESS'])
-        resolver_address = w3.to_checksum_address(CONFIG['RESOLVER'])
-    except ValueError as e:
-        logger.error(f"[Wallet #{index+1} | Attempt {reg_index}] Invalid contract or resolver address in configuration: {e}")
-        with processed_lock:
-            failed_count += 1
-            current_tasks_processed += 1
-        return
-
-    domain_registered = False
-    name = random_name() # Domain name generated here for each attempt
-
-    wallet_log_prefix = f"Wallet #{index+1} ({owner_address[:6]}...{owner_address[-4:]}) | Attempt {reg_index} | {name}.phrs"
-
-    # Fetch and display wallet balance at the start of each task
-    try:
-        balance_wei = w3.eth.get_balance(owner_address)
-        balance_eth = w3.from_wei(balance_wei, 'ether')
-        logger.info(f"[{wallet_log_prefix}] Current Balance: {balance_eth:.4f} ETH")
-    except Exception as e:
-        logger.warn(f"[{wallet_log_prefix}] Could not fetch balance: {e}")
-
-
-    while retry < MAX_RETRY:
+    def load_accounts(self):
         try:
-            controller = w3.eth.contract(address=controller_address, abi=CONTROLLER_ABI)
-            
-            secret = HexBytes(os.urandom(32))
-            
-            logger.step(f"Starting registration for {wallet_log_prefix}...")
+            with open('accounts.txt', 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        try:
+                            account = self.w3.eth.account.from_key(line)
+                            self.accounts.append(account)
+                        except ValueError:
+                            logger.error(f"Invalid private key: {line[:6]}...{line[-4:]}")
+            logger.success(f"Loaded {len(self.accounts)} accounts")
+        except FileNotFoundError:
+            logger.error("accounts.txt file not found!")
+            exit()
 
-            # 1. Create commitment
-            logger.commit_action(f"COMMIT {wallet_log_prefix} - Creating commitment...")
-            commitment = controller.functions.makeCommitment(
-                name,
-                owner_address,
-                CONFIG['DURATION'],
-                secret,
-                resolver_address,
-                CONFIG['DATA'],
-                CONFIG['REVERSE_RECORD'],
-                CONFIG['OWNER_CONTROLLED_FUSES']
-            ).call()
-            
-            # 2. Send commit transaction
-            logger.commit_action(f"COMMIT {wallet_log_prefix} - Sending transaction...")
-            tx_commit = controller.functions.commit(commitment).build_transaction({
-                'from': owner_address,
-                'nonce': w3.eth.get_transaction_count(owner_address),
-                'gas': 200000,
-                'gasPrice': w3.eth.gas_price,
-                'chainId': CONFIG['CHAIN_ID']
-            })
-            
-            signed_tx_commit = account.sign_transaction(tx_commit)
-            
-            try:
-                tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction)
-            except AttributeError as e:
-                logger.error(f"[CRITICAL] Failed to access raw_transaction for {wallet_log_prefix}: {e}")
-                raise # Re-raise to trigger retry
-            except ValueError as e: 
-                 if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
-                     logger.warn(f"Nonce error or transaction already in pool for {wallet_log_prefix}, retrying with new nonce.")
-                     tx_commit['nonce'] = w3.eth.get_transaction_count(owner_address) 
-                     signed_tx_commit = account.sign_transaction(tx_commit) 
-                     tx_hash_commit = w3.eth.send_raw_transaction(signed_tx_commit.raw_transaction) 
-                 else:
-                     raise 
+    def load_proxies(self):
+        try:
+            with open('proxies.txt', 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        self.proxies.append(line)
+            logger.success(f"Loaded {len(self.proxies)} proxies")
+        except FileNotFoundError:
+            logger.warn("proxies.txt file not found - running without proxies")
 
-            receipt_commit = w3.eth.wait_for_transaction_receipt(tx_hash_commit)
+    def generate_random_username(self, platform='x'):
+        """Generate random social media username"""
+        prefix = '@'
+        length = random.randint(5, 12)
+        chars = string.ascii_lowercase + string.digits + '_'
+        return prefix + ''.join(random.choice(chars) for _ in range(length))
+
+    async def check_balance(self, account):
+        """Check account balance"""
+        try:
+            balance = self.w3.eth.get_balance(account.address)
+            token_balance = self.contract.functions.balanceOf(account.address).call()
+            return {
+                'eth': self.w3.from_wei(balance, 'ether'),
+                'token': self.w3.from_wei(token_balance, 'ether')
+            }
+        except Exception as e:
+            logger.error(f"Balance check failed: {str(e)}")
+            return None
+
+    async def send_tip(self, sender_account, username, amount):
+        """Send tip to social media username"""
+        try:
+            # Prepare tip parameters
+            tip_token = {
+                "tokenType": 1,  # ERC20
+                "tokenAddress": self.Router
+            }
             
-            if receipt_commit.status == 1:
-                logger.info(f"COMMIT {wallet_log_prefix} - Successful! TX Hash: {tx_hash_commit.hex()}")
-            else:
-                logger.error(f"COMMIT {wallet_log_prefix} - Failed. TX Hash: {tx_hash_commit.hex()}")
-                raise Exception("Commitment transaction failed.")
-
-            # 3. Wait for minCommitmentAge (60 seconds)
-            logger.loading(f"WAITING 60 seconds for {wallet_log_prefix}...")
-            time.sleep(60)
-
-            # 4. Calculate domain rent price
-            logger.step(f"REGISTER {wallet_log_prefix} - Calculating rent price...")
-            price = controller.functions.rentPrice(name, CONFIG['DURATION']).call()
-            value = price[0] + price[1]
-            logger.info(f"REGISTER {wallet_log_prefix} - Rent price: {w3.from_wei(value, 'ether')} ETH.")
-
-            # 5. Send registration transaction
-            logger.step(f"REGISTER {wallet_log_prefix} - Sending transaction...")
-            tx_register = controller.functions.register(
-                name,
-                owner_address,
-                CONFIG['DURATION'],
-                secret,
-                resolver_address,
-                CONFIG['DATA'],
-                CONFIG['REVERSE_RECORD'],
-                CONFIG['OWNER_CONTROLLED_FUSES']
+            tip_recipient = {
+                "idSource": "x",
+                "id": username,
+                "amount": self.w3.to_wei(amount, 'ether'),
+                "nftIds": []
+            }
+            
+            # Build transaction
+            tx = self.contract.functions.tip(
+                tip_token,
+                tip_recipient
             ).build_transaction({
-                'from': owner_address,
-                'nonce': w3.eth.get_transaction_count(owner_address),
+                'from': sender_account.address,
+                'nonce': self.w3.eth.get_transaction_count(sender_account.address),
                 'gas': 300000,
-                'gasPrice': w3.eth.gas_price,
-                'value': value,
-                'chainId': CONFIG['CHAIN_ID']
+                'gasPrice': self.w3.to_wei('50', 'gwei'),
+                'value': 0
             })
             
-            signed_tx_register = account.sign_transaction(tx_register)
+            # Sign and send
+            signed_tx = sender_account.sign_transaction(tx)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            
+            # Wait for receipt
+            receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+            
+            if receipt.status == 1:
+                logger.actionSuccess(f"Sent {amount} to {username} | TX: {tx_hash.hex()}")
+                return True
+            else:
+                logger.error(f"Transaction failed for {username}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error sending tip: {str(e)}")
+            return False
 
-            try:
-                tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction)
-            except AttributeError as e:
-                logger.error(f"[CRITICAL] Failed to access raw_transaction for {wallet_log_prefix}: {e}")
-                raise 
-            except ValueError as e: 
-                 if "nonce" in str(e).lower() or "transaction already in pool" in str(e).lower():
-                     logger.warn(f"Nonce error or transaction already in pool for {wallet_log_prefix}, retrying with new nonce.")
-                     tx_register['nonce'] = w3.eth.get_transaction_count(owner_address) 
-                     signed_tx_register = account.sign_transaction(tx_register) 
-                     tx_hash_register = w3.eth.send_raw_transaction(signed_tx_register.raw_transaction) 
-                 else:
-                     raise 
+    async def show_menu(self):
+        clear_console()
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== DZAP BOT MENU ===")
+        print(f"{Colors.RESET}")
+        print("1. Send Tip")
+        print("2. Check Balances")
+        print("3. Run With Private Proxy")
+        print("4. Run Without Proxy")
+        print("5. Exit")
+        
+        choice = input(f"\n{Colors.CYAN}Select option (1-5): {Colors.RESET}")
+        return choice
+
+    async def send_tip_menu(self):
+        clear_console()
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SEND TIP ===")
+        print(f"{Colors.RESET}")
+        
+        if not self.accounts:
+            logger.error("No accounts available!")
+            return
             
-            receipt_register = w3.eth.wait_for_transaction_receipt(tx_hash_register)
+        # Select account
+        print("\nAvailable Accounts:")
+        for i, acc in enumerate(self.accounts, 1):
+            print(f"{i}. {acc.address}")
             
-            if receipt_register.status == 1:
-                logger.register_success(f"REGISTER {wallet_log_prefix} - SUCCESS! Domain {name}.phrs Registered! TX Hash: {tx_hash_register.hex()}")
-                domain_registered = True
+        acc_choice = input(f"\n{Colors.CYAN}Select account (1-{len(self.accounts)}): {Colors.RESET}")
+        try:
+            account = self.accounts[int(acc_choice)-1]
+        except:
+            logger.error("Invalid selection!")
+            return
+            
+        # Get amount
+        amount = input(f"\n{Colors.CYAN}How much do you want to send? {Colors.RESET}")
+        try:
+            amount = float(amount)
+        except:
+            logger.error("Invalid amount!")
+            return
+            
+        # Generate random username
+        username = self.generate_random_username()
+        
+        # Confirm
+        print(f"\n{Colors.YELLOW}Ready to send {amount} to {username}")
+        confirm = input(f"{Colors.CYAN}Confirm? (y/n): {Colors.RESET}")
+        if confirm.lower() != 'y':
+            return
+            
+        # Send tip
+        logger.action(f"Sending {amount} to {username}...")
+        success = await self.send_tip(account, username, amount)
+        if success:
+            logger.success("Tip sent successfully!")
+        else:
+            logger.error("Failed to send tip!")
+            
+        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
+
+    async def check_balances(self):
+        clear_console()
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== ACCOUNT BALANCES ===")
+        print(f"{Colors.RESET}")
+        
+        if not self.accounts:
+            logger.error("No accounts available!")
+            return
+            
+        for account in self.accounts:
+            balances = await self.check_balance(account)
+            if balances:
+                print(f"\n{Colors.CYAN}Account: {account.address}")
+                print(f"{Colors.WHITE}ETH Balance: {balances['eth']}")
+                print(f"{Colors.WHITE}Token Balance: {balances['token']}")
+            else:
+                logger.error(f"Failed to check balance for {account.address}")
+        
+        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
+
+    async def run(self):
+        """Main bot execution"""
+        await display_welcome_screen()
+        
+        while True:
+            choice = await self.show_menu()
+            
+            if choice == '1':
+                await self.send_tip_menu()
+            elif choice == '2':
+                await self.check_balances()
+            elif choice == '3':
+                self.use_proxy = True
+                logger.success("Proxy mode enabled")
+                await asyncio.sleep(1)
+            elif choice == '4':
+                self.use_proxy = False
+                logger.success("Proxy mode disabled")
+                await asyncio.sleep(1)
+            elif choice == '5':
+                logger.info("Exiting...")
                 break
             else:
-                logger.error(f"REGISTER {wallet_log_prefix} - FAILED. TX Hash: {tx_hash_register.hex()}")
-                raise Exception("Registration transaction failed.")
-
-        except Exception as err:
-            retry += 1
-            msg = str(err)[:150] + '...' if len(str(err)) > 150 else str(err)
-            logger.warn(f"Error processing {wallet_log_prefix}: {msg} - retrying ({retry}/{MAX_RETRY}) in 60 seconds...")
-            time.sleep(60)
-                
-    with processed_lock:
-        if domain_registered:
-            success_count += 1
-        else:
-            failed_count += 1
-        current_tasks_processed += 1
-    
-    print_progress()
-
-def print_progress():
-    """Prints the progress status to the console."""
-    clear_screen()
-    current_time_str = datetime.now().strftime("%H:%M:%S %d.%m.%y")
-    
-    print(f"""
-{Colors.BRIGHT_GREEN}{Colors.BOLD}
-[ WARDEN BOT ]
-{current_time_str}
-
-Automated Protocol Utility
-by {Colors.BRIGHT_WHITE}@ZonaAirdrop{Colors.BRIGHT_GREEN}
-
-Total Tasks: {total_tasks}
-Success: {success_count}
-Failed: {failed_count}
-Processed: {current_tasks_processed}/{total_tasks}
-{Colors.RESET}
-""")
-
-async def display_welcome_screen():
-    clear_screen()
-    now = datetime.now()
-    # Display welcome screen with a cleaner format
-    box_width = 40
-    print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
-    print("  ╔" + "═" * (box_width - 2) + "╗")
-    print(f"  ║{' ' * ((box_width - 2 - len('P H A R O S  B O T')) // 2)}P H A R O S  B O T{' ' * ((box_width - 2 - len('P H A R O S  B O T')) // 2 + (1 if (box_width - 2 - len('P H A R O S  B O T')) % 2 != 0 else 0))}║")
-    print("  ║" + " " * (box_width - 2) + "║")
-    
-    time_str = now.strftime('%H:%M:%S %d.%m.%Y')
-    print(f"  ║{' ' * ((box_width - 2 - len(time_str)) // 2)}{Colors.YELLOW}{time_str}{Colors.BRIGHT_GREEN}{' ' * ((box_width - 2 - len(time_str)) // 2 + (1 if (box_width - 2 - len(time_str)) % 2 != 0 else 0))}║")
-    print("  ║" + " " * (box_width - 2) + "║")
-
-    monad_str = "PHAROS TESTNET AUTOMATION"
-    print(f"  ║{' ' * ((box_width - 2 - len(monad_str)) // 2)}{monad_str}{' ' * ((box_width - 2 - len(monad_str)) // 2 + (1 if (box_width - 2 - len(monad_str)) % 2 != 0 else 0))}║")
-    
-    dev_str = "ZonaAirdrop | t.me/ZonaAirdr0p"
-    # Adjusted spacing for the developer info line
-    print(f"  ║{' ' * ((box_width - 2 - len(dev_str) + len(Colors.BRIGHT_WHITE) + len(Colors.BRIGHT_GREEN) + len(Colors.RESET)) // 2)}{Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}   |  t.me/ZonaAirdr0p{' ' * ((box_width - 2 - len(dev_str) + len(Colors.BRIGHT_WHITE) + len(Colors.BRIGHT_GREEN) + len(Colors.RESET)) // 2 + (1 if (box_width - 2 - len(dev_str) + len(Colors.BRIGHT_WHITE) + len(Colors.BRIGHT_GREEN) + len(Colors.RESET)) % 2 != 0 else 0))}║")
-    print("  ╚" + "═" * (box_width - 2) + "╝")
-    print(f"{Colors.RESET}")
-    # await asyncio.sleep(1) # Remove if you don't want a delay before the menu appears
-
-def main():
-    """Main function to run the domain registration process in parallel."""
-    global success_count, failed_count, total_tasks, current_tasks_processed
-
-    asyncio.run(display_welcome_screen()) # Display welcome screen
-
-    # Create a box for the proxy selection menu
-    box_width = 38 # Adjust box width
-    
-    print(f"{Colors.BRIGHT_WHITE}")
-    print("  ╔" + "═" * (box_width - 2) + "╗")
-    print(f"  ║ {Colors.BRIGHT_GREEN}[1] Run with Private Proxy{' ' * (box_width - 2 - len('[1] Run with Private Proxy'))}║")
-    print(f"  ║ {Colors.BRIGHT_RED}[2] Run without Proxy{' ' * (box_width - 2 - len('[2] Run without Proxy'))}║")
-    print("  ╚" + "═" * (box_width - 2) + "╝")
-    print(f"{Colors.RESET}")
-
-
-    use_proxy_option = input(f"{Colors.BRIGHT_CYAN}Choose an option (1 or 2): {Colors.RESET}").strip()
-    
-    proxy_list = []
-    if use_proxy_option == '1':
-        raw_proxy_list = load_file_lines("proxy.txt")
-        if not raw_proxy_list:
-            logger.warn("No proxies found in 'proxy.txt'. Running without proxy.")
-            use_proxy_option = '2'
-        else:
-            logger.info(f"Testing {len(raw_proxy_list)} proxies found...")
-            proxy_test_workers = min(len(raw_proxy_list), os.cpu_count() * 2 if os.cpu_count() else 10)
-            if proxy_test_workers == 0 and len(raw_proxy_list) > 0:
-                 proxy_test_workers = 1 
-
-            if proxy_test_workers > 0:
-                with ThreadPoolExecutor(max_workers=proxy_test_workers) as executor:
-                    tested_proxies_results = list(executor.map(test_proxy, raw_proxy_list))
-                proxy_list = [p for p, success in tested_proxies_results if success]
-            
-            if not proxy_list:
-                logger.warn("No functional proxies found from 'proxy.txt'. Bot will run without proxy.")
-                use_proxy_option = '2'
-            else:
-                logger.info(f"{len(proxy_list)} functional proxies will be used.")
-
-    pk_list = load_file_lines("accounts.txt")
-    
-    if not pk_list:
-        logger.error("No private keys found in 'accounts.txt'. Ensure the file exists and contains private keys.")
-        input("Press Enter to exit...")
-        return
-
-    logger.info(f"Total Accounts found: {len(pk_list)}")
-
-    reg_per_key_str = input(f"{Colors.BRIGHT_CYAN}How many domains do you want to generate per account? (e.g., 1): {Colors.RESET}").strip()
-    try:
-        CONFIG['REG_PER_KEY'] = int(reg_per_key_str)
-        if CONFIG['REG_PER_KEY'] <= 0:
-            raise ValueError
-    except ValueError:
-        logger.error("Invalid input. The number of domains must be a positive integer.")
-        input("Press Enter to exit...")
-        return
-    
-    max_concurrency_str = input(f"{Colors.BRIGHT_CYAN}Enter max threads/concurrency (e.g., 1 for sequential flow, >1 for parallel across accounts/tasks): {Colors.RESET}").strip()
-    try:
-        CONFIG['MAX_CONCURRENCY'] = int(max_concurrency_str)
-        if CONFIG['MAX_CONCURRENCY'] <= 0:
-            raise ValueError
-    except ValueError:
-        logger.error("Invalid input. The number of threads must be a positive integer.")
-        input("Press Enter to exit...")
-        return
-
-    success_count = 0
-    failed_count = 0
-    current_tasks_processed = 0
-
-    tasks_to_process = [(pk, idx, i + 1) for idx, pk in enumerate(pk_list) for i in range(CONFIG['REG_PER_KEY'])]
-    random.shuffle(tasks_to_process)
-    total_tasks = len(tasks_to_process)
-
-    print_progress()
-
-    logger.info(f"Starting domain registration for {len(pk_list)} accounts, total {total_tasks} registrations.")
-    
-    with ThreadPoolExecutor(max_workers=CONFIG['MAX_CONCURRENCY']) as executor:
-        futures = []
-        for pk, idx, reg_idx in tasks_to_process:
-            chosen_proxy = None
-            if use_proxy_option == '1' and proxy_list:
-                chosen_proxy = random.choice(proxy_list)
-            
-            futures.append(executor.submit(register_domain_single_task, pk, idx, reg_idx, chosen_proxy))
-        
-        for future in futures:
-            try:
-                future.result()
-            except Exception as e:
-                logger.error(f"Fatal error in one of the tasks: {e}. Bot may need to be restarted.")
-
-    print_progress()
-    logger.info("All domain registration tasks completed!")
-    input("Press Enter to exit...")
+                logger.error("Invalid choice!")
+                await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    # Python's built-in logging is not used for primary output as we have CustomLogger
-    logging.getLogger().setLevel(logging.CRITICAL) # Set level very high to suppress logs from web3.py etc.
-    
-    clear_screen()
-    logger.info("Domain registration bot started. Ensure 'accounts.txt' and 'proxy.txt' (optional) are available.")
-    while True:
-        try:
-            main()
-            break
-        except Exception as err:
-            logger.error(f"A FATAL unhandled error occurred in the main function: {str(err)}")
-            logger.info("Waiting 60 seconds before trying all processes again...")
-            time.sleep(60)
+    bot = SocialTipBot()
+    asyncio.run(bot.run())
