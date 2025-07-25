@@ -2,7 +2,7 @@ import os
 import random
 import string
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from colorama import Fore, Style, init
 from fake_useragent import FakeUserAgent
 from web3 import Web3
@@ -127,7 +127,7 @@ class SocialTipBot:
 
     def init_web3(self, proxy=None):
         if proxy:
-            logger.warn("Proxy integration for Web3 RPC is complex with standard HTTPProvider. Ensure system proxy is set if needed.")
+            logger.warn("Integrasi proxy untuk Web3 RPC rumit dengan HTTPProvider standar. Pastikan proxy sistem diatur jika diperlukan.")
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
         else:
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
@@ -148,13 +148,13 @@ class SocialTipBot:
                             account = self.w3.eth.account.from_key(line)
                             self.accounts.append(account)
                         except ValueError:
-                            logger.error(f"Invalid private key: {line[:6]}...{line[-4:]}")
-            logger.success(f"Loaded {len(self.accounts)} accounts")
+                            logger.error(f"Kunci pribadi tidak valid: {line[:6]}...{line[-4:]}")
+            logger.success(f"Memuat {len(self.accounts)} akun")
             if not self.accounts:
-                logger.error("No valid accounts found in accounts.txt. Please add private keys.")
+                logger.error("Tidak ada akun valid yang ditemukan di accounts.txt. Harap tambahkan kunci pribadi.")
                 exit()
         except FileNotFoundError:
-            logger.error("accounts.txt file not found! Please create it and add private keys.")
+            logger.error("File accounts.txt tidak ditemukan! Harap buat dan tambahkan kunci pribadi.")
             exit()
 
     def load_proxies(self):
@@ -164,25 +164,25 @@ class SocialTipBot:
                     line = line.strip()
                     if line and not line.startswith('#'):
                         self.proxies.append(line)
-            logger.success(f"Loaded {len(self.proxies)} proxies")
+            logger.success(f"Memuat {len(self.proxies)} proxy")
         except FileNotFoundError:
-            logger.warn("proxies.txt file not found - running without proxies by default. Use option 3 to enable proxy mode if proxies are added later.")
+            logger.warn("File proxies.txt tidak ditemukan - berjalan tanpa proxy secara default. Gunakan opsi 1 untuk mengaktifkan mode proxy jika proxy ditambahkan nanti.")
 
     def generate_random_username(self, platform='x'):
         prefix = '@'
         length = random.randint(5, 12)
         chars = string.ascii_lowercase + string.digits + '_'
-        return prefix + ''.join(random.choice(chars) for _ bathed(length))
+        return prefix + ''.join(random.choice(chars) for _ in range(length))
 
     async def check_balance(self, account):
         try:
             balance = self.w3.eth.get_balance(account.address)
             return {
                 'eth': self.w3.from_wei(balance, 'ether'),
-                'token': "N/A (No ERC20 balanceOf in Router ABI)"
+                'token': "Tidak Tersedia (Tidak ada balanceOf ERC20 dalam ABI Router)"
             }
         except Exception as e:
-            logger.error(f"Balance check failed for {account.address}: {str(e)}")
+            logger.error(f"Pengecekan saldo gagal untuk {account.address}: {str(e)}")
             return None
 
     async def send_tip(self, sender_account, username, amount):
@@ -216,161 +216,138 @@ class SocialTipBot:
             receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash)
             
             if receipt.status == 1:
-                logger.actionSuccess(f"Sent {amount} of token (at {self.Router}) to {username} | TX: {tx_hash.hex()}")
+                logger.actionSuccess(f"Mengirim {amount} token (di {self.Router}) ke {username} | TX: {tx_hash.hex()}")
                 return True
             else:
-                logger.error(f"Transaction failed for {username}. Receipt status: {receipt.status}")
+                logger.error(f"Transaksi gagal untuk {username}. Status tanda terima: {receipt.status}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error sending tip from {sender_account.address} to {username}: {str(e)}")
+            logger.error(f"Error mengirim tip dari {sender_account.address} ke {username}: {str(e)}")
             return False
 
-    async def show_menu(self):
+    async def show_main_menu(self):
         clear_console()
         print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== DZAP BOT MENU ===")
         print(f"{Colors.RESET}")
-        print("1. Run Automated Tip Cycle (24 hours)")
-        print("2. Check Balances")
-        print("3. Run Single Tip (Manual)")
-        print("4. Enable/Disable Proxy Mode")
-        print("5. Exit")
+        print("1. Kirim Tip")
+        print("2. Cek Saldo")
+        print("3. Keluar")
         
-        choice = input(f"\n{Colors.CYAN}Select option (1-5): {Colors.RESET}")
+        choice = input(f"\n{Colors.CYAN}Pilih opsi (1-3): {Colors.RESET}")
         return choice
 
-    async def send_single_tip_menu(self):
+    async def show_proxy_menu(self):
         clear_console()
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SEND SINGLE TIP ===")
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== MODE PROXY ===")
+        print(f"{Colors.RESET}")
+        print("1. Jalankan dengan proxy pribadi")
+        print("2. Jalankan tanpa proxy")
+        
+        choice = input(f"\n{Colors.CYAN}Pilih opsi (1-2): {Colors.RESET}")
+        return choice
+
+    async def handle_send_tip(self):
+        clear_console()
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== KIRIM TIP ===")
         print(f"{Colors.RESET}")
         
         if not self.accounts:
-            logger.error("No accounts available!")
+            logger.error("Tidak ada akun yang tersedia!")
             return
             
-        print("\nAvailable Accounts:")
+        if self.proxies:
+            proxy_choice = await self.show_proxy_menu()
+            if proxy_choice == '1':
+                self.use_proxy = True
+                logger.info("Mode proxy diaktifkan.")
+            elif proxy_choice == '2':
+                self.use_proxy = False
+                logger.info("Mode proxy dinonaktifkan.")
+            else:
+                logger.error("Pilihan tidak valid! Membatalkan.")
+                await asyncio.sleep(1)
+                return
+
+        print("\nAkun yang Tersedia:")
         for i, acc in enumerate(self.accounts, 1):
             print(f"{i}. {acc.address}")
             
-        acc_choice = input(f"\n{Colors.CYAN}Select account (1-{len(self.accounts)}): {Colors.RESET}")
+        acc_choice = input(f"\n{Colors.CYAN}Pilih akun (1-{len(self.accounts)}): {Colors.RESET}")
         try:
             account = self.accounts[int(acc_choice)-1]
         except (ValueError, IndexError):
-            logger.error("Invalid selection! Please enter a valid number.")
+            logger.error("Pilihan tidak valid! Harap masukkan angka yang valid.")
             return
             
-        amount_str = input(f"\n{Colors.CYAN}How much do you want to send? {Colors.RESET}")
+        amount_range_str = input(f"\n{Colors.CYAN}Masukkan rentang jumlah yang ingin dikirim (misal: 0.01-0.05): {Colors.RESET}")
         try:
-            amount = float(amount_str)
-            if amount <= 0:
+            min_amount_str, max_amount_str = amount_range_str.split('-')
+            min_amount = float(min_amount_str.strip())
+            max_amount = float(max_amount_str.strip())
+            if min_amount <= 0 or max_amount <= 0 or min_amount > max_amount:
                 raise ValueError
+            amount_to_send = random.uniform(min_amount, max_amount)
+            logger.info(f"Jumlah acak yang dipilih: {amount_to_send:.6f}")
         except ValueError:
-            logger.error("Invalid amount! Please enter a positive number.")
+            logger.error("Rentang jumlah tidak valid! Harap masukkan format 'min-max' dengan angka positif (misal: 0.01-0.05).")
             return
-            
+        
         username = self.generate_random_username()
         
-        print(f"\n{Colors.YELLOW}Ready to send {amount} (token at {self.Router}) to {username}")
-        confirm = input(f"{Colors.CYAN}Confirm? (y/n): {Colors.RESET}")
-        if confirm.lower() != 'y':
-            logger.info("Tip cancelled.")
-            return
+        logger.action(f"Mencoba mengirim {amount_to_send:.6f} token (di {self.Router}) ke {username} dari {account.address}...")
+        selected_proxy = None
+        if self.use_proxy and self.proxies:
+            selected_proxy = random.choice(self.proxies)
+            logger.info(f"Menggunakan proxy: {selected_proxy}")
+            # Catatan: Web3.py HTTPProvider tidak langsung mendukung proxy.
+            # Jika proxy ingin digunakan untuk RPC, perlu konfigurasi tingkat sistem
+            # atau penggunaan AsyncHTTPProvider dengan sesi aiohttp yang dikonfigurasi proxy.
+            # Untuk API eksternal (jika ada), Anda akan menggunakan aiohttp.ClientSession dengan proxy_url.
             
-        logger.action(f"Sending {amount} to {username} from {account.address}...")
-        success = await self.send_tip(account, username, amount)
+        success = await self.send_tip(account, username, amount_to_send)
         if success:
-            logger.success("Single tip sent successfully!")
+            logger.success("Tip berhasil dikirim!")
         else:
-            logger.error("Failed to send single tip!")
+            logger.error("Gagal mengirim tip!")
             
-        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
+        input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
 
-    async def check_balances(self):
+    async def check_balances_menu(self):
         clear_console()
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== ACCOUNT BALANCES ===")
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== SALDO AKUN ===")
         print(f"{Colors.RESET}")
         
         if not self.accounts:
-            logger.error("No accounts available!")
+            logger.error("Tidak ada akun yang tersedia!")
             return
             
         for account in self.accounts:
             balances = await self.check_balance(account)
             if balances:
-                print(f"\n{Colors.CYAN}Account: {account.address}")
-                print(f"{Colors.WHITE}ETH Balance: {balances['eth']}")
-                print(f"{Colors.WHITE}Token Balance: {balances['token']}")
+                print(f"\n{Colors.CYAN}Akun: {account.address}")
+                print(f"{Colors.WHITE}Saldo ETH: {balances['eth']}")
+                print(f"{Colors.WHITE}Saldo Token: {balances['token']}")
             else:
-                logger.error(f"Failed to check balance for {account.address}")
+                logger.error(f"Gagal memeriksa saldo untuk {account.address}")
         
-        input(f"\n{Colors.CYAN}Press Enter to continue...{Colors.RESET}")
-
-    async def countdown(self, seconds):
-        while seconds > 0:
-            minutes, secs = divmod(seconds, 60)
-            hours, minutes = divmod(minutes, 60)
-            timer = f"{hours:02d}:{minutes:02d}:{secs:02d}"
-            print(f"\r{Colors.YELLOW}Next run in: {timer}{Colors.RESET}", end="")
-            await asyncio.sleep(1)
-            seconds -= 1
-        print("\r" + " " * 50 + "\r", end="")
-
-    async def automated_tip_cycle(self):
-        logger.info("Starting automated tip cycle (24-hour interval)...")
-        while True:
-            for account in self.accounts:
-                clear_console()
-                logger.step(f"Processing account: {account.address}")
-                
-                balances = await self.check_balance(account)
-                if balances:
-                    logger.info(f"Current ETH Balance: {balances['eth']}")
-                else:
-                    logger.warn(f"Could not retrieve balance for {account.address}. Skipping this account for now.")
-                    continue
-
-                amount_to_send = 0.0001
-
-                username = self.generate_random_username()
-
-                logger.action(f"Attempting to send {amount_to_send} (token at {self.Router}) to {username} from {account.address}...")
-                success = await self.send_tip(account, username, amount_to_send)
-                if success:
-                    logger.success(f"Successfully tipped {amount_to_send} to {username} from {account.address}.")
-                else:
-                    logger.error(f"Failed to tip {amount_to_send} to {username} from {account.address}.")
-                
-                await asyncio.sleep(5)
-
-            logger.info("All accounts processed for this cycle. Waiting for next cycle...")
-            await self.countdown(24 * 60 * 60)
-            logger.info("24-hour delay complete. Starting next automated tip cycle.")
-
+        input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
 
     async def run(self):
         await display_welcome_screen()
         
         while True:
-            choice = await self.show_menu()
+            choice = await self.show_main_menu()
             
             if choice == '1':
-                await self.automated_tip_cycle()
+                await self.handle_send_tip()
             elif choice == '2':
-                await self.check_balances()
+                await self.check_balances_menu()
             elif choice == '3':
-                await self.send_single_tip_menu()
-            elif choice == '4':
-                self.use_proxy = not self.use_proxy
-                if self.use_proxy:
-                    logger.success("Proxy mode enabled. (Note: Web3 RPC proxying needs system-level setup or advanced aiohttp integration for AsyncHTTPProvider.)")
-                else:
-                    logger.success("Proxy mode disabled.")
-                await asyncio.sleep(1)
-            elif choice == '5':
-                logger.info("Exiting...")
+                logger.info("Keluar...")
                 break
             else:
-                logger.error("Invalid choice!")
+                logger.error("Pilihan tidak valid!")
                 await asyncio.sleep(1)
 
 if __name__ == "__main__":
