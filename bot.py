@@ -6,8 +6,8 @@ from datetime import datetime
 from colorama import Fore, Style, init
 from fake_useragent import FakeUserAgent
 from web3 import Web3
-# from web3.middleware.geth import geth_poa_middleware # Baris ini dihapus/dikomentari
-import aiohttp
+# from web3.middleware.geth import geth_poa_middleware # Baris ini dihapus/dikomentari sesuai permintaan
+import aiohttp # Keep aiohttp for potential future async HTTP requests if not using Web3's built-in async
 
 init(autoreset=True)
 
@@ -44,9 +44,9 @@ class Logger:
     @staticmethod
     def step(msg): Logger.log("STEP", "➤", msg, Colors.WHITE)
     @staticmethod
-    def action(msg): Logger.log("ACTION", "↪️", msg, Colors.CYAN)
+    def action(msg): Logger.log("ACTION", "↪️", msg, Colors.CYAN) # For transaction initiation
     @staticmethod
-    def actionSuccess(msg): Logger.log("ACTION", "✅", msg, Colors.GREEN)
+    def actionSuccess(msg): Logger.log("ACTION", "✅", msg, Colors.GREEN) # For transaction success with explorer link
 
 logger = Logger()
 
@@ -58,15 +58,15 @@ async def display_welcome_screen():
     now = datetime.now()
     print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
     print("  ╔══════════════════════════════════════╗")
-    print("  ║           D Z A P   B O T            ║")
+    print("  ║            D Z A P  B O T            ║")
     print("  ║                                      ║")
-    print(f"  ║     {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}           ║")
+    print(f"  ║      {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}            ║")
     print("  ║                                      ║")
-    print("  ║     PHAROS TESTNET AUTOMATION        ║")
-    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p   ║")
+    print("  ║      PHAROS TESTNET AUTOMATION       ║")
+    print(f"  ║   {Colors.BRIGHT_WHITE}ZonaAirdrop{Colors.BRIGHT_GREEN}  |  t.me/ZonaAirdr0p    ║")
     print("  ╚══════════════════════════════════════╝")
     print(f"{Colors.RESET}")
-    await asyncio.sleep(1)
+    await asyncio.sleep(1) # Keep this brief, or remove if you want instant menu
 
 class SocialTipBot:
     def __init__(self) -> None:
@@ -81,13 +81,14 @@ class SocialTipBot:
             "User-Agent": FakeUserAgent().random
         }
         self.BASE_API = "https://api.pharosnetwork.xyz"
-        self.RPC_URL = "https://testnet.dplabs-internal.com"
-        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02" # Alamat ini akan diubah ke checksum
+        self.RPC_URL = "https://testnet.dplabs-internal.com" # Ensure this supports async or is handled
+        self.Explorer_URL = "https://explorer.dplabs-internal.com/tx/" # Example explorer URL, adjust if different
+        self.Router = "0xd17512b7ec12880bd94eca9d774089ff89805f02" # This address will be converted to checksum
         self.proxies = []
         self.use_proxy = False
         self.accounts = []
         
-        # ABI baru, hanya berisi method "tip" dan semua boolean dikoreksi
+        # ABI, only contains "tip" method with corrected booleans
         self.contract_abi = [
             {
                 "inputs": [
@@ -138,7 +139,7 @@ class SocialTipBot:
                 ],
                 "name": "tip",
                 "outputs": [],
-                "stateMutability": "payable",
+                "stateMutability": "payable", # Crucial for sending native token as value
                 "type": "function"
             }
         ]
@@ -149,19 +150,24 @@ class SocialTipBot:
         self.load_proxies()
 
     def init_web3(self, proxy=None):
+        # Using AsyncHTTPProvider for async operations
         if proxy:
-            logger.warn("Integrasi proxy untuk Web3 RPC rumit dengan HTTPProvider standar. Pastikan proxy sistem diatur jika diperlukan.")
-            self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
+            logger.warn("Integrating proxy for Web3 RPC is complex with AsyncHTTPProvider. Consider system-wide proxy or custom transport for RPC if truly needed.")
+            self.w3 = Web3(Web3.AsyncHTTPProvider(self.RPC_URL))
         else:
-            self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
+            self.w3 = Web3(Web3.AsyncHTTPProvider(self.RPC_URL))
         
-        # self.w3.middleware_onion.inject(geth_poa_middleware, layer=0) # Baris ini dihapus/dikomentari
+        # # Inject PoA middleware if your chain requires it (e.g., Geth PoA) - Baris ini dihapus sesuai permintaan
+        # try:
+        #     self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        # except Exception as e:
+        #     logger.warn(f"Could not inject geth_poa_middleware. If your network is not PoA, this is fine. Error: {e}")
         
-        # Mengubah alamat Router menjadi checksum address
-        checksum_router_address = self.w3.to_checksum_address(self.Router)
+        # Convert Router address to checksum address
+        self.checksum_router_address = self.w3.to_checksum_address(self.Router)
         
         self.contract = self.w3.eth.contract(
-            address=checksum_router_address, # Menggunakan alamat checksum
+            address=self.checksum_router_address,
             abi=self.contract_abi
         )
 
@@ -203,10 +209,12 @@ class SocialTipBot:
 
     async def check_balance(self, account):
         try:
-            balance = self.w3.eth.get_balance(account.address)
+            balance = await self.w3.eth.get_balance(account.address)
+            # You would need the ABI of the actual token if you want to check its balance
+            # The current Router ABI only has 'tip', not a standard ERC20 balanceOf
             return {
                 'eth': self.w3.from_wei(balance, 'ether'),
-                'token': "Tidak Tersedia (Tidak ada balanceOf ERC20 dalam ABI Router)"
+                'token': "Tidak Tersedia (Perlu ABI Token spesifik untuk cek saldo ERC20)"
             }
         except Exception as e:
             logger.error(f"Pengecekan saldo gagal untuk {account.address}: {str(e)}")
@@ -215,42 +223,53 @@ class SocialTipBot:
     async def send_tip(self, sender_account, username, amount):
         try:
             tip_token = {
-                "tokenType": 1,
-                "tokenAddress": self.w3.to_checksum_address(self.Router) # Pastikan juga di sini
+                "tokenType": 1, # Assuming 1 for native token (ETH/Pharos token)
+                "tokenAddress": "0x0000000000000000000000000000000000000000" # Zero address for native token
             }
             
+            # The amount that will be sent as 'value' in the transaction
+            value_in_wei = self.w3.to_wei(amount, 'ether')
+
             tip_recipient = {
                 "idSource": "x",
                 "id": username,
-                "amount": self.w3.to_wei(amount, 'ether'),
+                "amount": value_in_wei, # This amount for the contract's internal logic
                 "nftIds": []
             }
             
+            # Get current nonce
+            nonce = await self.w3.eth.get_transaction_count(sender_account.address)
+
+            # Build the transaction
             tx = self.contract.functions.tip(
                 tip_token,
                 tip_recipient
             ).build_transaction({
                 'from': sender_account.address,
-                'nonce': self.w3.eth.get_transaction_count(sender_account.address),
-                'gas': 300000,
-                'gasPrice': self.w3.to_wei('50', 'gwei'),
-                'value': 0
+                'nonce': nonce,
+                'gas': 300000, # Consider fetching gas_limit estimate_gas
+                'gasPrice': self.w3.to_wei('50', 'gwei'), # Consider fetching current gas price
+                'value': value_in_wei # Crucial: send native token here
             })
             
             signed_tx = sender_account.sign_transaction(tx)
+            
+            logger.action(f"Mengirim transaksi dari {sender_account.address[:6]}...{sender_account.address[-4:]}...")
             tx_hash = await self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
             
+            logger.loading(f"Menunggu konfirmasi transaksi... {self.Explorer_URL}{tx_hash.hex()}")
             receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash)
             
             if receipt.status == 1:
-                logger.actionSuccess(f"Mengirim {amount} token (di {self.Router}) ke {username} | TX: {tx_hash.hex()}")
+                explorer_link = f"{self.Explorer_URL}{tx_hash.hex()}"
+                logger.actionSuccess(f"Mengirim {amount} token ke {username} | TX: {tx_hash.hex()} | Explorer: {explorer_link}")
                 return True
             else:
                 logger.error(f"Transaksi gagal untuk {username}. Status tanda terima: {receipt.status}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error mengirim tip dari {sender_account.address} ke {username}: {str(e)}")
+            logger.error(f"Error mengirim tip dari {sender_account.address[:6]}...{sender_account.address[-4:]} ke {username}: {str(e)}")
             return False
 
     async def show_main_menu(self):
@@ -265,7 +284,6 @@ class SocialTipBot:
         return choice
 
     async def show_proxy_menu(self):
-        clear_console()
         print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== MODE PROXY ===")
         print(f"{Colors.RESET}")
         print("1. Jalankan dengan proxy pribadi")
@@ -280,9 +298,26 @@ class SocialTipBot:
         print(f"{Colors.RESET}")
         
         if not self.accounts:
-            logger.error("Tidak ada akun yang tersedia!")
+            logger.error("Tidak ada akun yang tersedia! Harap tambahkan kunci pribadi ke accounts.txt.")
+            await asyncio.sleep(2) # Give user time to read
             return
             
+        # Ask for amount first
+        amount_range_str = input(f"\n{Colors.CYAN}Masukkan rentang jumlah yang ingin dikirim (misal: 0.01-0.05): {Colors.RESET}")
+        try:
+            min_amount_str, max_amount_str = amount_range_str.split('-')
+            min_amount = float(min_amount_str.strip())
+            max_amount = float(max_amount_str.strip())
+            if min_amount <= 0 or max_amount <= 0 or min_amount > max_amount:
+                raise ValueError
+            amount_to_send = random.uniform(min_amount, max_amount)
+            logger.info(f"Jumlah acak yang dipilih: {amount_to_send:.6f}")
+        except ValueError:
+            logger.error("Rentang jumlah tidak valid! Harap masukkan format 'min-max' dengan angka positif (misal: 0.01-0.05).")
+            await asyncio.sleep(2)
+            return
+
+        # Then ask for proxy choice
         if self.proxies:
             proxy_choice = await self.show_proxy_menu()
             if proxy_choice == '1':
@@ -295,6 +330,9 @@ class SocialTipBot:
                 logger.error("Pilihan tidak valid! Membatalkan.")
                 await asyncio.sleep(1)
                 return
+        else:
+            logger.warn("Tidak ada file proxies.txt ditemukan, melanjutkan tanpa proxy.")
+            self.use_proxy = False
 
         print("\nAkun yang Tersedia:")
         for i, acc in enumerate(self.accounts, 1):
@@ -305,29 +343,19 @@ class SocialTipBot:
             account = self.accounts[int(acc_choice)-1]
         except (ValueError, IndexError):
             logger.error("Pilihan tidak valid! Harap masukkan angka yang valid.")
+            await asyncio.sleep(2)
             return
             
-        amount_range_str = input(f"\n{Colors.CYAN}Masukkan rentang jumlah yang ingin dikirim (misal: 0.01-0.05): {Colors.RESET}")
-        try:
-            min_amount_str, max_amount_str = amount_range_str.split('-')
-            min_amount = float(min_amount_str.strip())
-            max_amount = float(max_amount_str.strip())
-            if min_amount <= 0 or max_amount <= 0 or min_amount > max_amount:
-                raise ValueError
-            amount_to_send = random.uniform(min_amount, max_amount)
-            logger.info(f"Jumlah acak yang dipilih: {amount_to_send:.6f}")
-        except ValueError:
-            logger.error("Rentang jumlah tidak valid! Harap masukkan format 'min-max' dengan angka positif (misal: 0.01-0.05).")
-            return
+        username = self.generate_random_username() # Receiver username, this seems to be for social platform
         
-        username = self.generate_random_username()
+        logger.step(f"Mencoba mengirim {amount_to_send:.6f} token (di Router: {self.checksum_router_address}) ke @{username} dari {account.address}...")
         
-        logger.action(f"Mencoba mengirim {amount_to_send:.6f} token (di {self.Router}) ke {username} dari {account.address}...")
         selected_proxy = None
         if self.use_proxy and self.proxies:
             selected_proxy = random.choice(self.proxies)
             logger.info(f"Menggunakan proxy: {selected_proxy}")
-            
+            logger.warn("Pengaturan proxy untuk panggilan Web3.py RPC memerlukan konfigurasi yang lebih lanjut (misalnya, transport kustom). Proxy yang dipilih dicatat tetapi tidak langsung diterapkan pada transaksi blockchain dalam pengaturan ini.")
+
         success = await self.send_tip(account, username, amount_to_send)
         if success:
             logger.success("Tip berhasil dikirim!")
@@ -343,13 +371,14 @@ class SocialTipBot:
         
         if not self.accounts:
             logger.error("Tidak ada akun yang tersedia!")
+            await asyncio.sleep(2)
             return
             
         for account in self.accounts:
             balances = await self.check_balance(account)
             if balances:
                 print(f"\n{Colors.CYAN}Akun: {account.address}")
-                print(f"{Colors.WHITE}Saldo ETH: {balances['eth']}")
+                print(f"{Colors.WHITE}Saldo ETH: {balances['eth']:.6f}")
                 print(f"{Colors.WHITE}Saldo Token: {balances['token']}")
             else:
                 logger.error(f"Gagal memeriksa saldo untuk {account.address}")
@@ -357,10 +386,10 @@ class SocialTipBot:
         input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
 
     async def run(self):
-        await display_welcome_screen()
+        await display_welcome_screen() # Display welcome once
         
         while True:
-            choice = await self.show_main_menu()
+            choice = await self.show_main_menu() # Always return to main menu
             
             if choice == '1':
                 await self.handle_send_tip()
@@ -371,7 +400,7 @@ class SocialTipBot:
                 break
             else:
                 logger.error("Pilihan tidak valid!")
-                await asyncio.sleep(1)
+                await asyncio.sleep(1) # Small delay for user to see error
 
 if __name__ == "__main__":
     bot = SocialTipBot()
