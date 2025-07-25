@@ -257,7 +257,7 @@ class SocialTipBot:
             return False
 
     async def show_main_menu(self):
-        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== DZAP BOT MENU ===")
+        print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== PRIMUS BOT MENU ===")
         print(f"{Colors.RESET}")
         print("1. Send Tip")
         print("2. Check Balance")
