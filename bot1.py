@@ -77,7 +77,7 @@ class PharosTestnet:
     async def load_proxies(self, use_proxy_choice: int):
         filename = "proxy.txt"
         try:
-            if use_proxy_choice == 1:
+            if use_proxy_choice == 1: # Scrape from proxyscrape.com
                 async with ClientSession(timeout=ClientTimeout(total=30)) as session:
                     async with session.get("https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text") as response:
                         response.raise_for_status()
@@ -85,7 +85,7 @@ class PharosTestnet:
                         with open(filename, 'w') as f:
                             f.write(content)
                         self.proxies = [line.strip() for line in content.splitlines() if line.strip()]
-            else:
+            else: # Use proxy.txt
                 if not os.path.exists(filename):
                     self.log(f"{Fore.RED + Style.BRIGHT}File {filename} Not Found.{Style.RESET_ALL}")
                     return
@@ -184,35 +184,6 @@ class PharosTestnet:
                     await asyncio.sleep(3)
                     continue
                 raise Exception(f"Failed to Connect to RPC: {str(e)}")
-        
-    async def get_token_balance(self, address: str, contract_address: str, use_proxy: bool):
-        try:
-            web3 = await self.get_web3_with_check(address, use_proxy)
-
-            if contract_address == "PHRS":
-                balance = web3.eth.get_balance(address)
-                decimals = 18
-            # The ERC20_CONTRACT_ABI is no longer needed if we only check PHRS balance.
-            # However, if there's any implicit dependency in other functions that check
-            # ERC20 token balances using this method, it might break.
-            # Given the current request, it's safer to assume get_token_balance is only
-            # called with "PHRS" for now. If other tokens were to be added back,
-            # ERC20_CONTRACT_ABI would be needed again.
-            else:
-                 # This block would require ERC20_CONTRACT_ABI, which has been removed.
-                 # If this part is actually called by some other remaining function, it will fail.
-                 # Based on the user's intent to only keep check-in/faucet, this path should not be taken.
-                 return None 
-
-            token_balance = balance / (10 ** decimals)
-
-            return token_balance
-        except Exception as e:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}     Message :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
-            )
-            return None
         
     async def get_access_token(self, account: str, address: str, signature: str, use_proxy: bool):
         proxy = self.get_next_proxy_for_account(address) if use_proxy else None
@@ -576,21 +547,16 @@ class PharosTestnet:
         self.clear_terminal()
         self.welcome()
 
-        print(Fore.WHITE + Style.BRIGHT + "Do you want to use proxy? (y/n)")
-        use_proxy_choice = input(Fore.YELLOW + Style.BRIGHT + ">> " + Style.RESET_ALL).lower()
-        use_proxy = use_proxy_choice == 'y'
+        # Load accounts first
+        account_filename = "accounts.txt" # Changed from account.txt
+        if not os.path.exists(account_filename):
+            self.log(f"{Fore.RED + Style.BRIGHT}File {account_filename} Not Found. Please create it and add your private keys.{Style.RESET_ALL}")
+            return
 
-        if use_proxy:
-            print(Fore.WHITE + Style.BRIGHT + "Choose proxy source:")
-            print(Fore.WHITE + Style.BRIGHT + "1. Scrape from proxyscrape.com")
-            print(Fore.WHITE + Style.BRIGHT + "2. Use proxy.txt")
-            proxy_source_choice = int(input(Fore.YELLOW + Style.BRIGHT + ">> " + Style.RESET_ALL))
-            await self.load_proxies(proxy_source_choice)
-
-        with open("account.txt", "r") as f:
+        with open(account_filename, "r") as f:
             accounts = [line.strip() for line in f.readlines()]
             if not accounts:
-                self.log(f"{Fore.RED + Style.BRIGHT}No Accounts Found in account.txt.{Style.RESET_ALL}")
+                self.log(f"{Fore.RED + Style.BRIGHT}No Accounts Found in {account_filename}. Please add private keys to the file.{Style.RESET_ALL}")
                 return
 
         while True:
@@ -604,6 +570,25 @@ class PharosTestnet:
             option = int(input(Fore.YELLOW + Style.BRIGHT + ">> " + Style.RESET_ALL))
 
             if option == 1:
+                print(Fore.WHITE + Style.BRIGHT + "Select proxy option:")
+                print(Fore.WHITE + Style.BRIGHT + "1. Run with private proxy")
+                print(Fore.WHITE + Style.BRIGHT + "2. Run without proxy")
+                proxy_choice = int(input(Fore.YELLOW + Style.BRIGHT + ">> " + Style.RESET_ALL))
+
+                use_proxy = False
+                if proxy_choice == 1:
+                    use_proxy = True
+                    print(Fore.WHITE + Style.BRIGHT + "Choose proxy source:")
+                    print(Fore.WHITE + Style.BRIGHT + "1. Scrape from proxyscrape.com")
+                    print(Fore.WHITE + Style.BRIGHT + "2. Use proxy.txt")
+                    proxy_source_choice = int(input(Fore.YELLOW + Style.BRIGHT + ">> " + Style.RESET_ALL))
+                    await self.load_proxies(proxy_source_choice)
+                elif proxy_choice == 2:
+                    use_proxy = False
+                else:
+                    self.log(f"{Fore.RED + Style.BRIGHT}Invalid Proxy Option. Using without proxy.{Style.RESET_ALL}")
+                    use_proxy = False
+
                 self.min_delay = int(input(Fore.WHITE + Style.BRIGHT + "Enter min delay (seconds): " + Style.RESET_ALL))
                 self.max_delay = int(input(Fore.WHITE + Style.BRIGHT + "Enter max delay (seconds): " + Style.RESET_ALL))
                 
