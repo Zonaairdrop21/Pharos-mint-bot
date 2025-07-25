@@ -245,23 +245,18 @@ class SocialTipBot:
                 'value': value_in_wei # Crucial: send native token here
             })
             
-            # Perbaikan di sini: Pastikan objek signed_tx memiliki atribut rawTransaction
-            # Objek yang dikembalikan oleh sign_transaction seharusnya selalu memilikinya.
-            # Jika tidak, ini menunjukkan masalah mendasar dengan library web3.py Anda.
             signed_tx = sender_account.sign_transaction(tx) 
             
-            # Memastikan kita mengakses rawTransaction dengan benar
-            raw_transaction = signed_tx.rawTransaction
-            tx_hash_from_signed = signed_tx.hash # Ini juga bisa digunakan jika diperlukan
+            # PERUBAHAN KRUSIAL DI SINI: Menggunakan .raw_transaction (snake_case)
+            raw_transaction = signed_tx.raw_transaction
+            # tx_hash_from_signed = signed_tx.hash # Ini juga bisa digunakan jika diperlukan
 
             logger.action(f"Mengirim transaksi dari {sender_account.address[:6]}...{sender_account.address[-4:]}...")
             
-            # Mengirim transaksi mentah
             tx_hash = await asyncio.to_thread(self.w3.eth.send_raw_transaction, raw_transaction)
             
             logger.loading(f"Menunggu konfirmasi transaksi... {self.Explorer_URL}{tx_hash.hex()}")
             
-            # Menunggu tanda terima transaksi
             receipt = await asyncio.to_thread(self.w3.eth.wait_for_transaction_receipt, tx_hash)
             
             if receipt.status == 1:
