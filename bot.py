@@ -185,10 +185,10 @@ class SocialTipBot:
             logger.success(f"Memuat {len(self.accounts)} akun")
             if not self.accounts:
                 logger.error("Tidak ada akun valid yang ditemukan di accounts.txt. Harap tambahkan kunci pribadi.")
-                exit()
+                # exit() # Jangan langsung keluar, biarkan user kembali ke menu
         except FileNotFoundError:
             logger.error("File accounts.txt tidak ditemukan! Harap buat dan tambahkan kunci pribadi.")
-            exit()
+            # exit() # Jangan langsung keluar, biarkan user kembali ke menu
 
     def load_proxies(self):
         try:
@@ -199,7 +199,8 @@ class SocialTipBot:
                         self.proxies.append(line)
             logger.success(f"Memuat {len(self.proxies)} proxy")
         except FileNotFoundError:
-            logger.warn("File proxies.txt tidak ditemukan - berjalan tanpa proxy secara default. Gunakan opsi 1 untuk mengaktifkan mode proxy jika proxy ditambahkan nanti.")
+            # Tidak lagi memberikan peringatan di sini, karena pilihan proxy akan selalu muncul
+            pass 
 
     def generate_random_username(self, platform='x'):
         prefix = '@'
@@ -287,8 +288,8 @@ class SocialTipBot:
     async def show_proxy_menu(self):
         print(f"\n{Colors.BRIGHT_GREEN}{Colors.BOLD}=== MODE PROXY ===")
         print(f"{Colors.RESET}")
-        print("1. Jalankan dengan proxy pribadi")
-        print("2. Jalankan tanpa proxy")
+        print("1. Run with private proxy")
+        print("2. Run without proxy")
         
         choice = input(f"\n{Colors.CYAN}Pilih opsi (1-2): {Colors.RESET}")
         return choice
@@ -302,7 +303,37 @@ class SocialTipBot:
             logger.error("Tidak ada akun yang tersedia! Harap tambahkan kunci pribadi ke accounts.txt.")
             await asyncio.sleep(2)
             return
-            
+
+        # NEW: Input jumlah transaksi yang diinginkan
+        total_transactions = 0
+        while True:
+            try:
+                num_transactions_str = input(f"\n{Colors.CYAN}Berapa banyak transaksi yang ingin Anda lakukan (misal: 10)? {Colors.RESET}")
+                total_transactions = int(num_transactions_str.strip())
+                if total_transactions <= 0:
+                    raise ValueError
+                break
+            except ValueError:
+                logger.error("Jumlah transaksi tidak valid! Harap masukkan angka bulat positif.")
+                await asyncio.sleep(1)
+
+        # Selalu tampilkan menu proxy
+        proxy_choice = await self.show_proxy_menu()
+        if proxy_choice == '1':
+            if not self.proxies:
+                logger.warn("Anda memilih mode proxy, tetapi tidak ada proxy yang dimuat dari proxies.txt. Akan dilanjutkan tanpa proxy.")
+                self.use_proxy = False
+            else:
+                self.use_proxy = True
+                logger.info("Mode proxy diaktifkan.")
+        elif proxy_choice == '2':
+            self.use_proxy = False
+            logger.info("Mode proxy dinonaktifkan.")
+        else:
+            logger.error("Pilihan tidak valid! Membatalkan.")
+            await asyncio.sleep(1)
+            return
+
         amount_range_str = input(f"\n{Colors.CYAN}Masukkan rentang jumlah yang ingin dikirim (misal: 0.01-0.05): {Colors.RESET}")
         try:
             min_amount_str, max_amount_str = amount_range_str.split('-')
@@ -310,27 +341,11 @@ class SocialTipBot:
             max_amount = float(max_amount_str.strip())
             if min_amount <= 0 or max_amount <= 0 or min_amount > max_amount:
                 raise ValueError
-            
+            logger.info(f"Jumlah acak akan dipilih antara {min_amount:.6f}-{max_amount:.6f}.")
         except ValueError:
             logger.error("Rentang jumlah tidak valid! Harap masukkan format 'min-max' dengan angka positif (misal: 0.01-0.05).")
             await asyncio.sleep(2)
             return
-
-        if self.proxies:
-            proxy_choice = await self.show_proxy_menu()
-            if proxy_choice == '1':
-                self.use_proxy = True
-                logger.info("Mode proxy diaktifkan.")
-            elif proxy_choice == '2':
-                self.use_proxy = False
-                logger.info("Mode proxy dinonaktifkan.")
-            else:
-                logger.error("Pilihan tidak valid! Membatalkan.")
-                await asyncio.sleep(1)
-                return
-        else:
-            logger.warn("Tidak ada file proxies.txt ditemukan, melanjutkan tanpa proxy.")
-            self.use_proxy = False
 
         # Input untuk Min Delay dan Max Delay
         try:
@@ -366,12 +381,22 @@ class SocialTipBot:
                 await asyncio.sleep(2)
                 return
         
-        for account in selected_accounts:
+        if not selected_accounts:
+            logger.error("Tidak ada akun yang dipilih untuk transaksi.")
+            input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
+            return
+
+        logger.info(f"Memulai {total_transactions} transaksi...")
+        for i in range(total_transactions):
+            logger.step(f"Transaksi {i+1}/{total_transactions}")
+            account = random.choice(selected_accounts) # Pilih akun secara acak dari yang dipilih
             amount_to_send = random.uniform(min_amount, max_amount)
             username = self.generate_random_username()
             
             logger.step(f"Mencoba mengirim {amount_to_send:.6f} token (di Router: {self.checksum_router_address}) ke @{username} dari {account.address}...")
             
+            # Proxy akan di-handle di level aiohttp jika digunakan, atau Web3.py jika custom transport
+            # Untuk Web3.py standar HTTPProvider, proxy perlu diatur di lingkungan atau sistem
             selected_proxy = None
             if self.use_proxy and self.proxies:
                 selected_proxy = random.choice(self.proxies)
@@ -384,12 +409,13 @@ class SocialTipBot:
             else:
                 logger.error("Gagal mengirim tip!")
             
-            if len(selected_accounts) > 1: # Apply delay only if multiple accounts are being processed
+            if i < total_transactions - 1: # Jangan delay setelah transaksi terakhir
                 delay = random.randint(self.min_delay, self.max_delay)
-                logger.loading(f"Menunggu {delay} detik sebelum akun berikutnya...")
+                logger.loading(f"Menunggu {delay} detik sebelum transaksi berikutnya...")
                 await asyncio.sleep(delay)
             
         input(f"\n{Colors.CYAN}Tekan Enter untuk melanjutkan...{Colors.RESET}")
+
 
     async def check_balances_menu(self):
         clear_console()
