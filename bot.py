@@ -6,7 +6,6 @@ from datetime import datetime
 from colorama import Fore, Style, init
 from fake_useragent import FakeUserAgent
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 import aiohttp
 
 # Initialize colorama
