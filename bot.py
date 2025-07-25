@@ -55,7 +55,7 @@ async def display_welcome_screen():
     now = datetime.now()
     print(f"{Colors.BRIGHT_GREEN}{Colors.BOLD}")
     print("  ╔══════════════════════════════════════╗")
-    print("  ║            D Z A P  B O T            ║")
+    print("  ║            P R I M U S L A B           ║")
     print("  ║                                      ║")
     print(f"  ║      {Colors.YELLOW}{now.strftime('%H:%M:%S %d.%m.%Y')}{Colors.BRIGHT_GREEN}            ║")
     print("  ║                                      ║")
