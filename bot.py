@@ -6,7 +6,6 @@ from datetime import datetime
 from colorama import Fore, Style, init
 from fake_useragent import FakeUserAgent
 from web3 import Web3
-from web3.middleware.geth import geth_poa_middleware # Baris ini diperbaiki
 import aiohttp
 
 init(autoreset=True)
@@ -132,7 +131,7 @@ class SocialTipBot:
         else:
             self.w3 = Web3(Web3.HTTPProvider(self.RPC_URL))
         
-        self.w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        # self.w3.middleware_onion.inject(geth_poa_middleware, layer=0) # Baris ini dihapus/dikomentari
         self.contract = self.w3.eth.contract(
             address=self.Router,
             abi=self.contract_abi
